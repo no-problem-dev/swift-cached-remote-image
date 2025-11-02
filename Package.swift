@@ -22,8 +22,8 @@ let package = Package(
         .target(
             name: "CachedRemoteImage",
             dependencies: [
-                "GeneralDomain",
-                "APIClient"
+                .product(name: "GeneralDomain", package: "swift-general-domain"),
+                .product(name: "APIClient", package: "swift-api-client")
             ]
         ),
         .testTarget(
