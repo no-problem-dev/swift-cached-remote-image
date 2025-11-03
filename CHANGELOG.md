@@ -5,6 +5,15 @@
 このフォーマットは [Keep a Changelog](https://keepachangelog.com/ja/1.0.0/) に基づいており、
 このプロジェクトは [Semantic Versioning](https://semver.org/lang/ja/) に準拠しています。
 
+## [1.0.3] - 2025-02-11
+
+### 追加
+- README に API 前提条件セクションを追加
+  - `.imageId` 使用時に必要な REST API 要件を明記
+  - 必須 API エンドポイントを文書化（GET, POST, DELETE）
+  - 必須 JSON レスポンス形式を camelCase で明記
+  - URL ベースの使用（.url/.urlString）は API サーバー不要であることを明確化
+
 ## [1.0.2] - 2025-02-11
 
 ### 改善
