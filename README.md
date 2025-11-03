@@ -270,33 +270,6 @@ struct ImageView: View {
 }
 ```
 
-### 動作の流れ
-
-1. `ImageService.getImageMetadata(imageId:)` で画像メタデータ（URL、幅、高さ）を取得
-2. 取得した URL から画像をダウンロード
-3. メタデータと画像データの両方をキャッシュ
-
-### ImageEntity を直接使用
-
-すでに `ImageEntity` を持っている場合は、その URL を使用します：
-
-```swift
-let imageEntity = ImageEntity(
-    id: "profile-pic-123",
-    url: URL(string: "https://example.com/images/profile.jpg")!,
-    width: 300,
-    height: 300
-)
-
-CachedRemoteImage(
-    source: .url(imageEntity.url)
-) { image in
-    image
-        .resizable()
-        .aspectRatio(contentMode: .fill)
-}
-```
-
 ## 機能
 
 - ✅ **SwiftUI ネイティブな API** - SwiftUI と完全に統合された使いやすいインターフェース
