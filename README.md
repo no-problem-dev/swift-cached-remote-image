@@ -11,6 +11,18 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 
 `swift-cached-remote-image` は、SwiftUI でリモート画像を効率的に読み込み、メモリとディスクキャッシュで管理するためのパッケージです。非同期画像読み込み、リトライポリシー、カスタマイズ可能なプレースホルダーなどの機能を提供します。
 
+### 主な機能
+
+- ✅ **SwiftUI ネイティブな API** - SwiftUI と完全に統合された使いやすいインターフェース
+- ✅ **メモリ & ディスクキャッシュ** - 自動的な二層キャッシュで高速表示
+- ✅ **非同期画像読み込み** - async/await を使った現代的な並行処理
+- ✅ **柔軟な ImageSource** - URL、URL 文字列、画像 ID から読み込み可能
+- ✅ **画像 ID サポート** - ImageService 経由でリソースから画像を取得
+- ✅ **カスタマイズ可能なリトライポリシー** - 定数、指数バックオフなど
+- ✅ **プレースホルダーとエラー表示のカスタマイズ** - 完全にカスタマイズ可能な UI
+- ✅ **キャッシュ管理** - リソースとデータキャッシュの個別管理
+- ✅ **iOS 17.0+ および macOS 14.0+ 対応** - クロスプラットフォームサポート
+
 ## 必要要件
 
 - iOS 17.0+
@@ -218,18 +230,10 @@ CachedRemoteImage(
 - **cachePolicy**: `.useProtocolCachePolicy`, `.reloadIgnoringLocalCacheData`, `.returnCacheDataElseLoad`, `.returnCacheDataDontLoad`
 - **retryPolicy**: `.none`, `.constant(maxAttempts:)`, `.exponential(maxAttempts:)`
 
-## 機能
-
-- ✅ **SwiftUI ネイティブな API** - SwiftUI と完全に統合された使いやすいインターフェース
-- ✅ **メモリ & ディスクキャッシュ** - 自動的な二層キャッシュで高速表示
-- ✅ **非同期画像読み込み** - async/await を使った現代的な並行処理
-- ✅ **柔軟な ImageSource** - URL、URL 文字列、画像 ID から読み込み可能
-- ✅ **画像 ID サポート** - ImageService 経由でリソースから画像を取得
-- ✅ **カスタマイズ可能なリトライポリシー** - 定数、指数バックオフなど
-- ✅ **プレースホルダーとエラー表示のカスタマイズ** - 完全にカスタマイズ可能な UI
-- ✅ **キャッシュ管理** - リソースとデータキャッシュの個別管理
-- ✅ **iOS 17.0+ および macOS 14.0+ 対応** - クロスプラットフォームサポート
-
 ## ライセンス
 
 このプロジェクトは MIT ライセンスの下で公開されています。詳細は [LICENSE](LICENSE) ファイルをご覧ください。
+
+## サポート
+
+問題が発生した場合や機能リクエストがある場合は、[GitHub の Issue](https://github.com/no-problem-dev/swift-cached-remote-image/issues) を作成してください。
