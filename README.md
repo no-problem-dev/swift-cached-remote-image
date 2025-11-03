@@ -17,6 +17,37 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 - macOS 14.0+
 - Swift 6.0+
 
+## 前提条件
+
+このパッケージを `.imageId` で使用する場合、**指定された形式のレスポンスを返す REST API** が必要です。
+
+### 必須 API エンドポイント
+
+1. **GET `/images/{imageId}`** - 画像メタデータ取得
+2. **POST `/images`** - 画像アップロード（multipart/form-data）
+3. **DELETE `/images/{imageId}`** - 画像削除
+
+### 必須レスポンス形式（JSON、camelCase）
+
+```json
+{
+  "id": "img_123",
+  "url": "https://example.com/images/photo.jpg",
+  "contentType": "image/jpeg",
+  "size": 123456,
+  "metadata": {
+    "width": 800,
+    "height": 600
+  },
+  "createdAt": "2024-01-01T00:00:00Z",
+  "updatedAt": "2024-01-01T00:00:00Z"
+}
+```
+
+> **重要**: レスポンスは **camelCase** である必要があります（`content_type` ではなく `contentType`）。
+
+URL 直接指定（`.url` / `.urlString`）の場合は、API サーバーは不要です。
+
 ## インストール
 
 ### Swift Package Manager
