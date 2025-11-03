@@ -1,16 +1,15 @@
 import Foundation
-import GeneralDomain
 
-/// 画像メタデータのキャッシュ（Actor-based with LRU eviction）
+/// 画像リソースのキャッシュ（Actor-based with LRU eviction）
 ///
-/// imageId → ImageEntity のマッピングをメモリ上で管理
+/// imageId → ImageResource のマッピングをメモリ上で管理
 /// LRU（Least Recently Used）アルゴリズムで古いエントリを自動削除
 internal actor ImageMetadataCache {
     private var cache: [String: CacheEntry] = [:]
     private let maxCacheSize: Int
 
     private struct CacheEntry {
-        let metadata: ImageEntity
+        let resource: ImageResource
         var lastAccessTime: Date
     }
 
@@ -18,8 +17,8 @@ internal actor ImageMetadataCache {
         self.maxCacheSize = maxCacheSize
     }
 
-    /// キャッシュされたメタデータを取得
-    func get(for imageId: String) -> ImageEntity? {
+    /// キャッシュされたリソースを取得
+    func get(for imageId: String) -> ImageResource? {
         guard var entry = cache[imageId] else {
             return nil
         }
@@ -28,18 +27,18 @@ internal actor ImageMetadataCache {
         entry.lastAccessTime = Date()
         cache[imageId] = entry
 
-        return entry.metadata
+        return entry.resource
     }
 
-    /// メタデータをキャッシュに保存
-    func set(_ entity: ImageEntity, for imageId: String) {
+    /// リソースをキャッシュに保存
+    func set(_ resource: ImageResource, for imageId: String) {
         // キャッシュが満杯の場合、古いエントリを削除
         if cache.count >= maxCacheSize {
             evictOldestEntries()
         }
 
         let entry = CacheEntry(
-            metadata: entity,
+            resource: resource,
             lastAccessTime: Date()
         )
         cache[imageId] = entry

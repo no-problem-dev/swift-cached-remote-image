@@ -1,10 +1,9 @@
 import Foundation
 import APIClient
-import GeneralDomain
 
-/// 画像メタデータ取得のリポジトリ（内部実装）
+/// 画像リソース取得のリポジトリ（内部実装）
 ///
-/// APIClientを使用してREST APIから画像メタデータを取得
+/// APIClientを使用してREST APIから画像リソース情報を取得
 internal struct ImageRepository: Sendable {
     let apiClient: APIClient
     let imagesPath: String
@@ -14,15 +13,15 @@ internal struct ImageRepository: Sendable {
         self.imagesPath = imagesPath
     }
 
-    /// 画像メタデータを取得
+    /// 画像リソースを取得
     /// - Parameter imageId: 画像ID
-    /// - Returns: 画像エンティティ
-    func getImageMetadata(imageId: String) async throws -> ImageEntity {
+    /// - Returns: 画像リソース
+    func getImageResource(imageId: String) async throws -> ImageResource {
         let endpoint = APIEndpoint(
             path: "\(imagesPath)/\(imageId)",
             method: .get
         )
-        let dto: ImageEntityDTO = try await apiClient.request(endpoint)
-        return dto.toDomain()
+        let dto: ImageResourceDTO = try await apiClient.request(endpoint)
+        return dto.toResource()
     }
 }

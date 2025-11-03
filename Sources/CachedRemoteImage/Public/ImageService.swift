@@ -4,7 +4,6 @@ import UIKit
 #elseif canImport(AppKit)
 import AppKit
 #endif
-import GeneralDomain
 
 #if canImport(UIKit)
 public typealias PlatformImage = UIImage
@@ -19,16 +18,16 @@ public typealias PlatformImage = NSImage
 /// 使用例:
 /// ```swift
 /// let service = ImageServiceImpl(apiClient: client, imagesPath: "/images")
-/// let entity = try await service.uploadImage(imageData: jpegData)
-/// let image = await service.loadImage(from: URL(string: entity.url)!)
+/// let resource = try await service.uploadImage(imageData: jpegData)
+/// let image = await service.loadImage(from: resource.url)
 /// ```
 public protocol ImageService: Sendable {
-    /// 画像メタデータを取得（キャッシュ対応）
+    /// 画像リソースを取得（キャッシュ対応）
     ///
     /// - Parameter imageId: 画像ID
-    /// - Returns: 画像エンティティ
+    /// - Returns: 画像リソース
     /// - Throws: ネットワークエラー、デコードエラー
-    func getImageMetadata(imageId: String) async throws -> ImageEntity
+    func getImageResource(imageId: String) async throws -> ImageResource
 
     /// URLから画像を読み込み（メモリ＋ディスクキャッシュ対応）
     ///
@@ -39,9 +38,9 @@ public protocol ImageService: Sendable {
     /// 画像をアップロード
     ///
     /// - Parameter imageData: 画像データ（JPEG推奨）
-    /// - Returns: アップロードされた画像エンティティ
+    /// - Returns: アップロードされた画像リソース
     /// - Throws: ネットワークエラー、サーバーエラー
-    func uploadImage(imageData: Data) async throws -> ImageEntity
+    func uploadImage(imageData: Data) async throws -> ImageResource
 
     /// 画像を削除
     ///
@@ -49,8 +48,8 @@ public protocol ImageService: Sendable {
     /// - Throws: ネットワークエラー、サーバーエラー
     func deleteImage(imageId: String) async throws
 
-    /// メタデータキャッシュをクリア
-    func clearMetadataCache() async
+    /// リソースキャッシュをクリア
+    func clearResourceCache() async
 
     /// 画像データキャッシュをクリア
     func clearImageCache() async

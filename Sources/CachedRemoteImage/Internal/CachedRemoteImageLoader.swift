@@ -1,5 +1,4 @@
 import Foundation
-import GeneralDomain
 
 /// 画像読み込みロジックを管理するObservableクラス
 ///
@@ -72,25 +71,21 @@ internal final class CachedRemoteImageLoader {
             return image
         }
 
-        // imageIdから取得（2段階: メタデータ取得 → 画像ダウンロード）
+        // imageIdから取得（2段階: リソース取得 → 画像ダウンロード）
         guard let imageId = source.imageId else {
             throw ImageLoadError.invalidURL("Invalid image source")
         }
 
-        // 1. 画像メタデータ（URL含む）を取得
-        let imageEntity: ImageEntity
+        // 1. 画像リソース（URL含む）を取得
+        let imageResource: ImageResource
         do {
-            imageEntity = try await imageService.getImageMetadata(imageId: imageId)
+            imageResource = try await imageService.getImageResource(imageId: imageId)
         } catch {
             throw ImageLoadError.metadataFetchFailed(error.localizedDescription)
         }
 
         // 2. URLから画像をロード
-        guard let url = URL(string: imageEntity.url) else {
-            throw ImageLoadError.invalidURL(imageEntity.url)
-        }
-
-        guard let image = await imageService.loadImage(from: url) else {
+        guard let image = await imageService.loadImage(from: imageResource.url) else {
             throw ImageLoadError.downloadFailed
         }
 

@@ -1,36 +1,18 @@
 import Foundation
-import GeneralDomain
 
-/// 画像エンティティのDTO（RESTful API標準構造）
-internal struct ImageEntityDTO: Codable {
+/// 画像リソースのDTO（最小限の構造）
+internal struct ImageResourceDTO: Codable {
     let id: String
     let url: String
-    let contentType: String
-    let size: Int
-    let metadata: MetadataDTO?
-    let createdAt: String  // ISO 8601
-    let updatedAt: String  // ISO 8601
 
-    struct MetadataDTO: Codable {
-        let width: Int?
-        let height: Int?
-    }
-
-    func toDomain() -> ImageEntity {
-        let domainMetadata = metadata.map { dto in
-            ImageEntity.ImageMetadata(width: dto.width, height: dto.height)
+    func toResource() -> ImageResource {
+        guard let url = URL(string: url) else {
+            fatalError("Invalid URL: \(url)")
         }
 
-        let dateFormatter = ISO8601DateFormatter()
-
-        return ImageEntity(
+        return ImageResource(
             id: id,
-            url: url,
-            contentType: contentType,
-            size: size,
-            metadata: domainMetadata,
-            createdAt: dateFormatter.date(from: createdAt) ?? Date(),
-            updatedAt: dateFormatter.date(from: updatedAt) ?? Date()
+            url: url
         )
     }
 }

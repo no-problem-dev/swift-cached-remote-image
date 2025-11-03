@@ -5,11 +5,10 @@ import UIKit
 import AppKit
 #endif
 import APIClient
-import GeneralDomain
 
 /// ImageServiceの実装
 ///
-/// APIClient、メタデータキャッシュ、画像データキャッシュを内部で管理し、
+/// APIClient、リソースキャッシュ、画像データキャッシュを内部で管理し、
 /// 効率的な画像のCRUD操作とキャッシュ管理を提供します。
 ///
 /// ## 初期化例
@@ -18,14 +17,14 @@ import GeneralDomain
 /// let service = ImageServiceImpl(
 ///     apiClient: apiClient,
 ///     imagesPath: "/v1/images",
-///     maxMetadataCacheSize: 200
+///     maxResourceCacheSize: 200
 /// )
 /// ```
 public struct ImageServiceImpl: ImageService {
     private let apiClient: APIClient
     private let imagesPath: String
     private let repository: ImageRepository
-    private let metadataCache: ImageMetadataCache
+    private let resourceCache: ImageMetadataCache
     private let imageCache: ImageDataCache
 
     /// APIClientを使用した初期化
@@ -33,11 +32,11 @@ public struct ImageServiceImpl: ImageService {
     /// - Parameters:
     ///   - apiClient: APIクライアント
     ///   - imagesPath: 画像APIのパス（baseURLからの相対パス）
-    ///   - maxMetadataCacheSize: メタデータキャッシュの最大サイズ
+    ///   - maxResourceCacheSize: リソースキャッシュの最大サイズ
     public init(
         apiClient: APIClient,
         imagesPath: String,
-        maxMetadataCacheSize: Int
+        maxResourceCacheSize: Int
     ) {
         self.apiClient = apiClient
         self.imagesPath = imagesPath
@@ -45,25 +44,25 @@ public struct ImageServiceImpl: ImageService {
             apiClient: apiClient,
             imagesPath: imagesPath
         )
-        self.metadataCache = ImageMetadataCache(maxCacheSize: maxMetadataCacheSize)
+        self.resourceCache = ImageMetadataCache(maxCacheSize: maxResourceCacheSize)
         self.imageCache = ImageDataCache()
     }
 
     // MARK: - 読み取り操作
 
-    public func getImageMetadata(imageId: String) async throws -> ImageEntity {
+    public func getImageResource(imageId: String) async throws -> ImageResource {
         // 1. キャッシュチェック
-        if let cached = await metadataCache.get(for: imageId) {
+        if let cached = await resourceCache.get(for: imageId) {
             return cached
         }
 
         // 2. APIから取得
-        let entity = try await repository.getImageMetadata(imageId: imageId)
+        let resource = try await repository.getImageResource(imageId: imageId)
 
         // 3. キャッシュに保存
-        await metadataCache.set(entity, for: imageId)
+        await resourceCache.set(resource, for: imageId)
 
-        return entity
+        return resource
     }
 
     public func loadImage(from url: URL) async -> PlatformImage? {
@@ -94,7 +93,7 @@ public struct ImageServiceImpl: ImageService {
 
     // MARK: - 書き込み操作
 
-    public func uploadImage(imageData: Data) async throws -> ImageEntity {
+    public func uploadImage(imageData: Data) async throws -> ImageResource {
         // マルチパートフォームデータとしてアップロード
         let boundary = UUID().uuidString
         var body = Data()
@@ -114,14 +113,14 @@ public struct ImageServiceImpl: ImageService {
             body: body
         )
 
-        // APIは完全なImageEntityを返すようになった
-        let dto: ImageEntityDTO = try await apiClient.request(endpoint)
-        let entity = dto.toDomain()
+        // APIはImageResourceを返す
+        let dto: ImageResourceDTO = try await apiClient.request(endpoint)
+        let resource = dto.toResource()
 
-        // メタデータをキャッシュに保存
-        await metadataCache.set(entity, for: entity.id)
+        // リソースをキャッシュに保存
+        await resourceCache.set(resource, for: resource.id)
 
-        return entity
+        return resource
     }
 
     public func deleteImage(imageId: String) async throws {
@@ -132,13 +131,13 @@ public struct ImageServiceImpl: ImageService {
         try await apiClient.request(endpoint)
 
         // キャッシュからも削除
-        await metadataCache.remove(for: imageId)
+        await resourceCache.remove(for: imageId)
     }
 
     // MARK: - キャッシュ管理
 
-    public func clearMetadataCache() async {
-        await metadataCache.clearAll()
+    public func clearResourceCache() async {
+        await resourceCache.clearAll()
     }
 
     public func clearImageCache() async {

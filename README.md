@@ -17,13 +17,17 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 - macOS 14.0+
 - Swift 6.0+
 
+## 依存関係
+
+- [swift-api-client](https://github.com/no-problem-dev/swift-api-client) - HTTP クライアント
+
 ## 前提条件
 
 このパッケージを `.imageId` で使用する場合、**指定された形式のレスポンスを返す REST API** が必要です。
 
 ### 必須 API エンドポイント
 
-1. **GET `/images/{imageId}`** - 画像メタデータ取得
+1. **GET `/images/{imageId}`** - 画像リソース取得
 2. **POST `/images`** - 画像アップロード（multipart/form-data）
 3. **DELETE `/images/{imageId}`** - 画像削除
 
@@ -32,19 +36,11 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 ```json
 {
   "id": "img_123",
-  "url": "https://example.com/images/photo.jpg",
-  "contentType": "image/jpeg",
-  "size": 123456,
-  "metadata": {
-    "width": 800,
-    "height": 600
-  },
-  "createdAt": "2024-01-01T00:00:00Z",
-  "updatedAt": "2024-01-01T00:00:00Z"
+  "url": "https://example.com/images/photo.jpg"
 }
 ```
 
-> **重要**: レスポンスは **camelCase** である必要があります（`content_type` ではなく `contentType`）。
+> **重要**: レスポンスは **camelCase** である必要があります。
 
 URL 直接指定（`.url` / `.urlString`）の場合は、API サーバーは不要です。
 
@@ -56,14 +52,14 @@ URL 直接指定（`.url` / `.urlString`）の場合は、API サーバーは不
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "1.0.0")
+    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "1.1.0")
 ]
 ```
 
 または Xcode で：
 1. File > Add Package Dependencies
 2. パッケージ URL を入力: `https://github.com/no-problem-dev/swift-cached-remote-image.git`
-3. バージョンを選択: `1.0.0` 以降
+3. バージョンを選択: `1.1.0` 以降
 
 ## クイックスタート
 
@@ -125,31 +121,29 @@ CachedRemoteImage(source: .url(url))
 // 2. URL 文字列から（自動的に URL に変換）
 CachedRemoteImage(source: .urlString("https://example.com/image.jpg"))
 
-// 3. 画像 ID から（ImageService 経由でメタデータを取得）
+// 3. 画像 ID から（ImageService 経由でリソースを取得）
 CachedRemoteImage(source: .imageId("img_12345"))
 ```
 
 > **注意**: `.imageId` を使用する場合は、`ImageService` を環境に注入する必要があります。
 
-### ImageService を使った高度な使用例
-
-ImageService が必要な場合（画像ID からメタデータを取得する場合など）：
+### ImageService を使った画像 ID からの取得
 
 ```swift
 import APIClient
 import CachedRemoteImage
 
-// ImageService を作成して注入
+// ImageService をセットアップ
 @main
 struct MyApp: App {
-    let apiClient = APIClientImpl(baseURL: URL(string: "https://api.example.com")!)
     let imageService: ImageService
 
     init() {
+        let apiClient = APIClientImpl(baseURL: URL(string: "https://api.example.com")!)
         imageService = ImageServiceImpl(
             apiClient: apiClient,
             imagesPath: "/images",
-            maxMetadataCacheSize: 100
+            maxResourceCacheSize: 100
         )
     }
 
@@ -161,17 +155,17 @@ struct MyApp: App {
     }
 }
 
-// ビュー内で ImageEntity を使用
-struct ProfileView: View {
-    let imageEntity: ImageEntity
+// 画像 ID で画像を表示
+struct ImageView: View {
+    let imageId: String
 
     var body: some View {
         CachedRemoteImage(
-            source: .url(imageEntity.url)
+            source: .imageId(imageId)
         ) { image in
             image
                 .resizable()
-                .aspectRatio(contentMode: .fill)
+                .aspectRatio(contentMode: .fit)
         }
     }
 }
@@ -179,22 +173,22 @@ struct ProfileView: View {
 
 ## キャッシュ設定
 
-### メタデータキャッシュサイズの設定
+### リソースキャッシュサイズの設定
 
 ```swift
-// ImageServiceImpl でメタデータキャッシュサイズを設定
+// ImageServiceImpl でリソースキャッシュサイズを設定
 let imageService = ImageServiceImpl(
     apiClient: apiClient,
     imagesPath: "/images",
-    maxMetadataCacheSize: 200  // メタデータキャッシュ: 最大200エントリ
+    maxResourceCacheSize: 200  // リソースキャッシュ: 最大200エントリ
 )
 ```
 
 ### キャッシュクリア
 
 ```swift
-// メタデータキャッシュをクリア
-await imageService.clearMetadataCache()
+// リソースキャッシュをクリア
+await imageService.clearResourceCache()
 
 // 画像データキャッシュをクリア
 await imageService.clearImageCache()
@@ -224,68 +218,17 @@ CachedRemoteImage(
 - **cachePolicy**: `.useProtocolCachePolicy`, `.reloadIgnoringLocalCacheData`, `.returnCacheDataElseLoad`, `.returnCacheDataDontLoad`
 - **retryPolicy**: `.none`, `.constant(maxAttempts:)`, `.exponential(maxAttempts:)`
 
-## 画像 ID からの取得（ImageService 使用）
-
-ImageService を使用すると、画像 ID から自動的にメタデータを取得して画像を表示できます：
-
-```swift
-import APIClient
-import CachedRemoteImage
-
-// 1. ImageService をセットアップ
-@main
-struct MyApp: App {
-    let imageService: ImageService
-
-    init() {
-        let apiClient = APIClientImpl(baseURL: URL(string: "https://api.example.com")!)
-        imageService = ImageServiceImpl(
-            apiClient: apiClient,
-            imagesPath: "/images",
-            maxMetadataCacheSize: 100
-        )
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .imageService(imageService)
-        }
-    }
-}
-
-// 2. 画像 ID で画像を表示
-struct ImageView: View {
-    let imageId: String
-
-    var body: some View {
-        CachedRemoteImage(
-            source: .imageId(imageId)
-        ) { image in
-            image
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-        }
-    }
-}
-```
-
 ## 機能
 
 - ✅ **SwiftUI ネイティブな API** - SwiftUI と完全に統合された使いやすいインターフェース
 - ✅ **メモリ & ディスクキャッシュ** - 自動的な二層キャッシュで高速表示
 - ✅ **非同期画像読み込み** - async/await を使った現代的な並行処理
 - ✅ **柔軟な ImageSource** - URL、URL 文字列、画像 ID から読み込み可能
-- ✅ **画像 ID サポート** - ImageService 経由でメタデータから画像を取得
+- ✅ **画像 ID サポート** - ImageService 経由でリソースから画像を取得
 - ✅ **カスタマイズ可能なリトライポリシー** - 定数、指数バックオフなど
 - ✅ **プレースホルダーとエラー表示のカスタマイズ** - 完全にカスタマイズ可能な UI
-- ✅ **キャッシュ管理** - メタデータとデータキャッシュの個別管理
+- ✅ **キャッシュ管理** - リソースとデータキャッシュの個別管理
 - ✅ **iOS 17.0+ および macOS 14.0+ 対応** - クロスプラットフォームサポート
-
-## 依存関係
-
-- [swift-general-domain](https://github.com/no-problem-dev/swift-general-domain) - ドメインモデル
-- [swift-api-client](https://github.com/no-problem-dev/swift-api-client) - HTTP クライアント
 
 ## ライセンス
 

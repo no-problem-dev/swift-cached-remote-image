@@ -15,14 +15,12 @@ let package = Package(
             targets: ["CachedRemoteImage"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/no-problem-dev/swift-general-domain.git", from: "1.0.0"),
         .package(url: "https://github.com/no-problem-dev/swift-api-client.git", from: "1.0.0")
     ],
     targets: [
         .target(
             name: "CachedRemoteImage",
             dependencies: [
-                .product(name: "GeneralDomain", package: "swift-general-domain"),
                 .product(name: "APIClient", package: "swift-api-client")
             ]
         ),
