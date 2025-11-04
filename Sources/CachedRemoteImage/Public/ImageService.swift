@@ -33,6 +33,8 @@ public protocol ImageService: Sendable {
     ///
     /// - Parameter url: 画像URL
     /// - Returns: プラットフォーム画像（失敗時はnil）
+    /// - Note: MainActorで実行されます（PlatformImageは非Sendableのため）
+    @MainActor
     func loadImage(from url: URL) async -> PlatformImage?
 
     /// 画像をアップロード
