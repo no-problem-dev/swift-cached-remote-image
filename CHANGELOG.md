@@ -5,6 +5,23 @@
 このフォーマットは [Keep a Changelog](https://keepachangelog.com/ja/1.0.0/) に基づいており、
 このプロジェクトは [Semantic Versioning](https://semver.org/lang/ja/) に準拠しています。
 
+## [1.0.5] - 2025-11-04
+
+### 追加
+- DocC ドキュメントの自動生成と GitHub Pages への公開機能を追加
+  - Swift DocC Plugin を依存関係に追加
+  - GitHub Actions ワークフローで自動的にドキュメントを生成・デプロイ
+  - README に完全なドキュメントへのリンクを追加 (https://no-problem-dev.github.io/swift-cached-remote-image/documentation/cachedremoteimage/)
+
+### 変更
+- ドキュメントへのアクセシビリティを向上
+
+### 修正
+- Swift 6 strict concurrency モードでのコンパイルエラーを修正
+  - `ImageService.loadImage(from:)` に `@MainActor` を追加
+  - `ImageDataCache` のメソッドに `@MainActor` を追加
+  - 非 Sendable 型（`NSImage`/`UIImage`）のアクター境界問題を解決
+
 ## [1.0.4] - 2025-02-11
 
 ### 改善
