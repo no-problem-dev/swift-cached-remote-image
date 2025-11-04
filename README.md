@@ -7,6 +7,8 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 ![SPM](https://img.shields.io/badge/Swift_Package_Manager-compatible-brightgreen.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
+📚 **[完全なドキュメント](https://no-problem-dev.github.io/swift-cached-remote-image/documentation/cachedremoteimage/)**
+
 ## 概要
 
 `swift-cached-remote-image` は、SwiftUI でリモート画像を効率的に読み込み、メモリとディスクキャッシュで管理するためのパッケージです。非同期画像読み込み、リトライポリシー、カスタマイズ可能なプレースホルダーなどの機能を提供します。
