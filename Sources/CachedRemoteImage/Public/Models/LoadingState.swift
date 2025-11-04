@@ -44,7 +44,9 @@ public enum ImageLoadError: Error, Equatable, Sendable {
 /// ```
 /// idle → loading → success or failure
 /// ```
-public enum LoadingState: Sendable {
+///
+/// - Note: MainActorで使用されることを想定しているため、Sendableに準拠していません。
+public enum LoadingState {
     /// 読み込み開始前（初期状態）
     case idle
 
