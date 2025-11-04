@@ -65,6 +65,7 @@ public struct ImageServiceImpl: ImageService {
         return resource
     }
 
+    @MainActor
     public func loadImage(from url: URL) async -> PlatformImage? {
         let urlString = url.absoluteString
 

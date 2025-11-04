@@ -35,6 +35,7 @@ internal final class ImageDataCache: @unchecked Sendable {
     }
 
     /// キャッシュされた画像を取得
+    @MainActor
     func get(for url: String) async -> PlatformImage? {
         let key = cacheKey(for: url)
 
@@ -59,6 +60,7 @@ internal final class ImageDataCache: @unchecked Sendable {
     }
 
     /// 画像をキャッシュに保存
+    @MainActor
     func set(_ image: PlatformImage, for url: String) async {
         let key = cacheKey(for: url)
 
