@@ -5,6 +5,15 @@
 このフォーマットは [Keep a Changelog](https://keepachangelog.com/ja/1.0.0/) に基づいており、
 このプロジェクトは [Semantic Versioning](https://semver.org/lang/ja/) に準拠しています。
 
+## [未リリース]
+
+なし
+
+## [1.1.2] - 2025-11-09
+
+### 修正
+- 自動リリースワークフローのメッセージを完全に日本語に統一（PRディスクリプション、リリースノート、ログメッセージ）
+
 ## [1.0.5] - 2025-11-04
 
 ### 追加
@@ -75,3 +84,7 @@
 - プレースホルダーとエラー表示のカスタマイズ
 - キャッシュ管理
 - iOS 17.0+ および macOS 14.0+ サポート
+
+[未リリース]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.0.5...v1.1.2
+[1.0.5]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.0.4...v1.0.5
