@@ -99,3 +99,5 @@
 [1.0.5]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.0.4...v1.0.5
 
 <!-- Auto-generated on 2025-11-09T05:06:53Z by release workflow -->
+
+<!-- Auto-generated on 2025-11-13T01:14:35Z by release workflow -->
