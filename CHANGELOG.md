@@ -9,6 +9,14 @@
 
 なし
 
+## [1.1.3] - 2025-11-13
+
+### 変更
+- パッケージ依存関係の記法を明示的な `.upToNextMajor(from:)` に変更
+  - `swift-api-client`: `from: "1.0.0"` → `.upToNextMajor(from: "1.0.0")`
+  - `swift-docc-plugin`: `from: "1.4.0"` → `.upToNextMajor(from: "1.4.0")`
+  - 機能的には同等だが、バージョニング戦略の意図がより明確に
+
 ## [1.1.2] - 2025-11-09
 
 ### 修正
@@ -85,7 +93,8 @@
 - キャッシュ管理
 - iOS 17.0+ および macOS 14.0+ サポート
 
-[未リリース]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.2...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.0.5...v1.1.2
 [1.0.5]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.0.4...v1.0.5
 
