@@ -20,10 +20,10 @@ import APIClient
 ///     maxResourceCacheSize: 200
 /// )
 /// ```
-public struct ImageServiceImpl: ImageService {
-    private let apiClient: APIClient
+public struct ImageServiceImpl<Client: APIExecutable>: ImageService {
+    private let apiClient: Client
     private let imagesPath: String
-    private let repository: ImageRepository
+    private let repository: ImageRepository<Client>
     private let resourceCache: ImageMetadataCache
     private let imageCache: ImageDataCache
 
@@ -34,7 +34,7 @@ public struct ImageServiceImpl: ImageService {
     ///   - imagesPath: 画像APIのパス（baseURLからの相対パス）
     ///   - maxResourceCacheSize: リソースキャッシュの最大サイズ
     public init(
-        apiClient: APIClient,
+        apiClient: Client,
         imagesPath: String,
         maxResourceCacheSize: Int
     ) {
@@ -97,25 +97,10 @@ public struct ImageServiceImpl: ImageService {
     public func uploadImage(imageData: Data) async throws -> ImageResource {
         // マルチパートフォームデータとしてアップロード
         let boundary = UUID().uuidString
-        var body = Data()
 
-        // ファイルパート
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-        let endpoint = APIEndpoint(
-            path: imagesPath,
-            method: .post,
-            headers: ["Content-Type": "multipart/form-data; boundary=\(boundary)"],
-            body: body
+        let dto: ImageResourceDTO = try await apiClient.execute(
+            UploadImageContract(basePath: imagesPath, imageData: imageData, boundary: boundary)
         )
-
-        // APIはImageResourceを返す
-        let dto: ImageResourceDTO = try await apiClient.request(endpoint)
         let resource = dto.toResource()
 
         // リソースをキャッシュに保存
@@ -125,11 +110,9 @@ public struct ImageServiceImpl: ImageService {
     }
 
     public func deleteImage(imageId: String) async throws {
-        let endpoint = APIEndpoint(
-            path: "\(imagesPath)/\(imageId)",
-            method: .delete
+        try await apiClient.execute(
+            DeleteImageContract(basePath: imagesPath, imageId: imageId)
         )
-        try await apiClient.request(endpoint)
 
         // キャッシュからも削除
         await resourceCache.remove(for: imageId)
