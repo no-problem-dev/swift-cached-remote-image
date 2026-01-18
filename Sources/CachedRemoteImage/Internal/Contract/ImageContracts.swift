@@ -34,6 +34,17 @@ struct GetImageResourceContract: APIContract, APIInput {
 
 // MARK: - Upload Image Contract
 
+/// アップロードリクエストボディ（Base64エンコード）
+struct UploadImageRequestBody: Codable {
+    let imageData: String
+    let contentType: String
+
+    enum CodingKeys: String, CodingKey {
+        case imageData = "image_data"
+        case contentType = "content_type"
+    }
+}
+
 struct UploadImageContract: APIContract, APIInput {
     typealias Input = Self
     typealias Output = ImageResourceDTO
@@ -43,23 +54,19 @@ struct UploadImageContract: APIContract, APIInput {
 
     let basePath: String
     let imageData: Data
-    let boundary: String
+    let contentType: String
 
     var pathParameters: [String: String] { [:] }
     var queryParameters: [String: String]? { nil }
 
     func encodeBody(using encoder: JSONEncoder) throws -> Data? {
-        var body = Data()
-
-        // ファイルパート
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-        return body
+        // Base64エンコードしてJSON形式で送信
+        let base64String = imageData.base64EncodedString()
+        let requestBody = UploadImageRequestBody(
+            imageData: base64String,
+            contentType: contentType
+        )
+        return try encoder.encode(requestBody)
     }
 
     static func resolvePath(with input: Self) -> String {
