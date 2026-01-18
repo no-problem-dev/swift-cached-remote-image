@@ -95,11 +95,13 @@ public struct ImageServiceImpl<Client: APIExecutable>: ImageService {
     // MARK: - 書き込み操作
 
     public func uploadImage(imageData: Data) async throws -> ImageResource {
-        // マルチパートフォームデータとしてアップロード
-        let boundary = UUID().uuidString
+        try await uploadImage(imageData: imageData, contentType: "image/jpeg")
+    }
 
+    public func uploadImage(imageData: Data, contentType: String) async throws -> ImageResource {
+        // Base64エンコードしてJSONボディとしてアップロード
         let dto: ImageResourceDTO = try await apiClient.execute(
-            UploadImageContract(basePath: imagesPath, imageData: imageData, boundary: boundary)
+            UploadImageContract(basePath: imagesPath, imageData: imageData, contentType: contentType)
         )
         let resource = dto.toResource()
 

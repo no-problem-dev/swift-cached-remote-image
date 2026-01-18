@@ -9,6 +9,16 @@
 
 なし
 
+## [1.1.5] - 2026-01-18
+
+### 変更
+- 画像アップロードをマルチパートフォームデータからBase64エンコードJSONボディ形式に変更
+- `UploadImageRequestBody` 構造体を追加してリクエストボディを構造化
+- `ImageService` プロトコルに `uploadImage(imageData:contentType:)` メソッドを追加（コンテンツタイプ指定可能）
+
+### 破壊的変更
+- サーバー側がBase64 JSONボディを期待する形式に対応するための変更
+
 ## [1.1.4] - 2026-01-08
 
 ### 変更
@@ -102,7 +112,8 @@
 - キャッシュ管理
 - iOS 17.0+ および macOS 14.0+ サポート
 
-[未リリース]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.4...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.5...HEAD
+[1.1.5]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.0.5...v1.1.2
@@ -111,3 +122,5 @@
 <!-- Auto-generated on 2025-11-09T05:06:53Z by release workflow -->
 
 <!-- Auto-generated on 2025-11-13T01:14:35Z by release workflow -->
+
+<!-- Auto-generated on 2026-01-08T00:03:15Z by release workflow -->

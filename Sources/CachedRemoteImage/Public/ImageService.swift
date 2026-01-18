@@ -44,6 +44,15 @@ public protocol ImageService: Sendable {
     /// - Throws: ネットワークエラー、サーバーエラー
     func uploadImage(imageData: Data) async throws -> ImageResource
 
+    /// 画像をアップロード（コンテンツタイプ指定）
+    ///
+    /// - Parameters:
+    ///   - imageData: 画像データ
+    ///   - contentType: 画像のコンテンツタイプ（image/jpeg, image/png など）
+    /// - Returns: アップロードされた画像リソース
+    /// - Throws: ネットワークエラー、サーバーエラー
+    func uploadImage(imageData: Data, contentType: String) async throws -> ImageResource
+
     /// 画像を削除
     ///
     /// - Parameter imageId: 画像ID
