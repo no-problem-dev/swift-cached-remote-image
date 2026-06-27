@@ -66,5 +66,5 @@ public protocol ImageService: Sendable {
     func clearImageCache() async
 
     /// ディスクキャッシュサイズを取得（バイト単位）
-    func getCacheSize() async -> Int64
+    func diskCacheSize() async -> Int64
 }

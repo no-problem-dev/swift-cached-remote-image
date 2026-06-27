@@ -130,7 +130,7 @@ public struct ImageServiceImpl<Client: APIExecutable>: ImageService {
         await imageCache.clearAll()
     }
 
-    public func getCacheSize() async -> Int64 {
-        await imageCache.getCacheSize()
+    public func diskCacheSize() async -> Int64 {
+        await imageCache.diskCacheSize()
     }
 }

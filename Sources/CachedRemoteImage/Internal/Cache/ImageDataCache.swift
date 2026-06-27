@@ -109,7 +109,7 @@ internal final class ImageDataCache: @unchecked Sendable {
     }
 
     /// キャッシュサイズを取得（ディスクのみ）
-    func getCacheSize() async -> Int64 {
+    func diskCacheSize() async -> Int64 {
         guard let contents = try? fileManager.contentsOfDirectory(
             at: cacheDirectory,
             includingPropertiesForKeys: [.fileSizeKey]

@@ -16,8 +16,8 @@ public struct DefaultLoadingView: View {
 ///
 /// エラーメッセージとリトライボタンを表示します。
 public struct DefaultErrorView: View {
-    let error: ImageLoadError
-    let onRetry: (() -> Void)?
+    public let error: ImageLoadError
+    public let onRetry: (() -> Void)?
 
     public init(error: ImageLoadError, onRetry: (() -> Void)? = nil) {
         self.error = error

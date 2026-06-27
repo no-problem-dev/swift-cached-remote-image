@@ -180,8 +180,8 @@ extension CachedRemoteImage where Content == Image, Loading == DefaultLoadingVie
 // MARK: - Environment Support
 
 /// ImageService用のEnvironmentKey
-public struct ImageServiceKey: EnvironmentKey {
-    public static var defaultValue: ImageService? {
+struct ImageServiceKey: EnvironmentKey {
+    static var defaultValue: ImageService? {
         nil
     }
 }
@@ -197,14 +197,14 @@ public extension EnvironmentValues {
 
 /// ImageServiceを注入するためのViewModifier
 /// パッケージ境界を越えて環境値を確実に伝播させるために使用
-public struct ImageServiceModifier: ViewModifier {
+struct ImageServiceModifier: ViewModifier {
     private let imageService: ImageService
-    
-    public init(imageService: ImageService) {
+
+    init(imageService: ImageService) {
         self.imageService = imageService
     }
-    
-    public func body(content: Content) -> some View {
+
+    func body(content: Content) -> some View {
         content
             .environment(\.imageService, imageService)
     }

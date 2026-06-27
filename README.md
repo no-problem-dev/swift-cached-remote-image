@@ -42,7 +42,7 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 ### 必須 API エンドポイント
 
 1. **GET `/images/{imageId}`** - 画像リソース取得
-2. **POST `/images`** - 画像アップロード（multipart/form-data）
+2. **POST `/images`** - 画像アップロード（Base64-encoded JSON）
 3. **DELETE `/images/{imageId}`** - 画像削除
 
 ### 必須レスポンス形式（JSON、camelCase）
@@ -208,7 +208,7 @@ await imageService.clearResourceCache()
 await imageService.clearImageCache()
 
 // キャッシュサイズを取得
-let cacheSize = await imageService.getCacheSize()
+let cacheSize = await imageService.diskCacheSize()
 print("Current cache size: \(cacheSize) bytes")
 ```
 
@@ -219,8 +219,8 @@ print("Current cache size: \(cacheSize) bytes")
 CachedRemoteImage(
     source: .url(imageURL),
     configuration: CachedRemoteImageConfiguration(
-        cachePolicy: .useProtocolCachePolicy,
-        retryPolicy: .exponential(maxAttempts: 3)
+        cachePolicy: .metadataOnly,
+        retryPolicy: .exponentialBackoff(maxRetries: 3)
     )
 ) { image in
     image.resizable()
@@ -229,8 +229,8 @@ CachedRemoteImage(
 
 利用可能な設定：
 
-- **cachePolicy**: `.useProtocolCachePolicy`, `.reloadIgnoringLocalCacheData`, `.returnCacheDataElseLoad`, `.returnCacheDataDontLoad`
-- **retryPolicy**: `.none`, `.constant(maxAttempts:)`, `.exponential(maxAttempts:)`
+- **cachePolicy**: `.all`（デフォルト）, `.metadataOnly`, `.imageOnly`, `.none`
+- **retryPolicy**: `.none`（デフォルト）, `.fixed(count:)`, `.exponentialBackoff(maxRetries:, baseDelay:)`
 
 ## ライセンス
 
