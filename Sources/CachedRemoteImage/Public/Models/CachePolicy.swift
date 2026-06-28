@@ -1,22 +1,26 @@
 /// キャッシュ戦略を制御する列挙型
 ///
-/// キャッシュの動作を柔軟に制御することで、パフォーマンスとリソース使用のバランスを調整できます。
+/// キャッシュの動作を柔軟に制御することで、パフォーマンスとリソース使用のバランスを調整できる。
+/// ``CachedRemoteImageConfiguration`` の `cachePolicy` プロパティに渡して使う。
 ///
 /// ## 使用例
 /// ```swift
 /// // すべてキャッシュを利用（デフォルト、推奨）
-/// CachedRemoteImage(source: .imageId("abc"), cachePolicy: .all)
+/// CachedRemoteImage(source: .imageId("abc123"))  // configuration: .standard がデフォルト
 ///
 /// // メタデータのみキャッシュ（画像は毎回ダウンロード）
-/// CachedRemoteImage(source: .imageId("abc"), cachePolicy: .metadataOnly)
+/// CachedRemoteImage(
+///     source: .imageId("abc123"),
+///     configuration: CachedRemoteImageConfiguration(cachePolicy: .metadataOnly)
+/// )
 ///
 /// // キャッシュを一切使わない（常に最新を取得）
-/// CachedRemoteImage(source: .imageId("abc"), cachePolicy: .none)
+/// CachedRemoteImage(source: .imageId("abc123"), configuration: .noCache)
 /// ```
 public enum CachePolicy: Equatable, Sendable {
     /// メタデータと画像データの両方をキャッシュ（推奨）
     ///
-    /// 最も効率的で、通常はこれを使用します。
+    /// 最も効率的で、通常はこれを使用する。
     case all
 
     /// メタデータのみキャッシュ、画像データは毎回ダウンロード
@@ -31,7 +35,7 @@ public enum CachePolicy: Equatable, Sendable {
 
     /// キャッシュを一切使用しない
     ///
-    /// 常に最新のデータを取得したい場合に使用。パフォーマンスは低下します。
+    /// 常に最新のデータを取得したい場合に使用。パフォーマンスは低下する。
     case none
 
     /// メタデータキャッシュを使用するかどうか

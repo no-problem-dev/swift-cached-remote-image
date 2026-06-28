@@ -2,7 +2,7 @@ import Foundation
 
 /// 画像読み込みエラーの種類
 ///
-/// エラーの原因を特定し、適切なエラーハンドリングを可能にします。
+/// エラーの原因を特定し、適切なエラーハンドリングを可能にする。
 public enum ImageLoadError: Error, Equatable, Sendable {
     /// メタデータの取得に失敗
     case metadataFetchFailed(String)
@@ -38,7 +38,7 @@ public enum ImageLoadError: Error, Equatable, Sendable {
 
 /// 画像の読み込み状態を表す列挙型
 ///
-/// UIの状態管理を明確にし、適切な表示を可能にします。
+/// UI の状態管理を明確にし、適切な表示を可能にする。
 ///
 /// ## 状態遷移
 /// ```

@@ -6,18 +6,24 @@ import AppKit
 #endif
 
 #if canImport(UIKit)
+/// iOS/macOS 両対応のプラットフォーム画像型。iOS では `UIImage`、macOS では `NSImage` が割り当てられる。
 public typealias PlatformImage = UIImage
 #elseif canImport(AppKit)
+/// iOS/macOS 両対応のプラットフォーム画像型。iOS では `UIImage`、macOS では `NSImage` が割り当てられる。
 public typealias PlatformImage = NSImage
 #endif
 
 /// 画像管理サービスのプロトコル
 ///
-/// リモート画像のCRUD操作とキャッシュ機能を提供します。
+/// リモート画像のCRUD操作とキャッシュ機能を提供する。
 ///
 /// 使用例:
 /// ```swift
-/// let service = ImageServiceImpl(apiClient: client, imagesPath: "/images")
+/// let service = ImageServiceImpl(
+///     apiClient: client,
+///     imagesPath: "/images",
+///     maxResourceCacheSize: 100
+/// )
 /// let resource = try await service.uploadImage(imageData: jpegData)
 /// let image = await service.loadImage(from: resource.url)
 /// ```

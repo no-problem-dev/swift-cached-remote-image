@@ -7,11 +7,15 @@ import SwiftUI
 /// // シンプル
 /// CachedRemoteImage(source: .imageId("abc123"))
 ///
-/// // カスタマイズ
+/// // カスタマイズ（全クロージャ指定）
 /// CachedRemoteImage(source: .imageId("abc123")) { image in
 ///     image.resizable()
 /// } loading: {
 ///     ProgressView()
+/// } error: { _ in
+///     Text("エラー")
+/// } placeholder: {
+///     Color.gray.opacity(0.2)
 /// }
 /// ```
 ///
@@ -33,6 +37,15 @@ public struct CachedRemoteImage<Content: View, Loading: View, ErrorView: View, P
     private let placeholder: () -> Placeholder
 
     /// カスタムビューを指定可能なイニシャライザ
+    ///
+    /// - Parameters:
+    ///   - source: 画像の取得元
+    ///   - contentMode: 画像の表示モード（デフォルト: .fit）
+    ///   - configuration: キャッシュとリトライの設定（デフォルト: .standard）
+    ///   - content: 読み込み成功時に画像を表示するビルダー
+    ///   - loading: 読み込み中に表示するビルダー
+    ///   - error: エラー発生時に表示するビルダー
+    ///   - placeholder: 読み込み開始前に表示するビルダー
     public init(
         source: ImageSource,
         contentMode: ContentMode = .fit,
@@ -96,7 +109,7 @@ extension CachedRemoteImage where Loading == DefaultLoadingView, ErrorView == De
     /// デフォルトのローディング・エラービューを使用するイニシャライザ
     ///
     /// ローディングとエラービューはデフォルト実装を使用し、
-    /// 画像とプレースホルダーのみカスタマイズできます。
+    /// 画像とプレースホルダーのみカスタマイズできる。
     ///
     /// - Parameters:
     ///   - source: 画像の取得元
@@ -126,7 +139,7 @@ extension CachedRemoteImage where Loading == DefaultLoadingView, ErrorView == De
 extension CachedRemoteImage where Loading == DefaultLoadingView, ErrorView == DefaultErrorView, Placeholder == DefaultPlaceholderView {
     /// 最もシンプルなイニシャライザ（画像のみカスタマイズ）
     ///
-    /// ローディング、エラー、プレースホルダーはすべてデフォルト実装を使用します。
+    /// ローディング、エラー、プレースホルダーはすべてデフォルト実装を使用する。
     ///
     /// - Parameters:
     ///   - source: 画像の取得元
@@ -154,7 +167,7 @@ extension CachedRemoteImage where Loading == DefaultLoadingView, ErrorView == De
 extension CachedRemoteImage where Content == Image, Loading == DefaultLoadingView, ErrorView == DefaultErrorView, Placeholder == DefaultPlaceholderView {
     /// 完全にデフォルトのイニシャライザ
     ///
-    /// すべてデフォルト実装を使用する、最もシンプルな使い方です。
+    /// すべてデフォルト実装を使用する最もシンプルな形。
     ///
     /// - Parameters:
     ///   - source: 画像の取得元
@@ -187,6 +200,7 @@ struct ImageServiceKey: EnvironmentKey {
 }
 
 public extension EnvironmentValues {
+    /// 画像サービスの環境値。`View.imageService(_:)` モディファイアで注入する。
     var imageService: ImageService? {
         get { self[ImageServiceKey.self] }
         set { self[ImageServiceKey.self] = newValue }

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// デフォルトのローディングビュー
 ///
-/// シンプルなプログレスインジケーターを表示します。
+/// シンプルなプログレスインジケーターを表示する。
 public struct DefaultLoadingView: View {
     public init() {}
 
@@ -14,9 +14,11 @@ public struct DefaultLoadingView: View {
 
 /// デフォルトのエラービュー
 ///
-/// エラーメッセージとリトライボタンを表示します。
+/// エラーメッセージとリトライボタンを表示する。`onRetry` を渡すと再試行ボタンが現れる。
 public struct DefaultErrorView: View {
+    /// 表示するエラー
     public let error: ImageLoadError
+    /// 再試行時に呼ばれるクロージャ。`nil` の場合は再試行ボタンを非表示にする。
     public let onRetry: (() -> Void)?
 
     public init(error: ImageLoadError, onRetry: (() -> Void)? = nil) {
@@ -50,7 +52,7 @@ public struct DefaultErrorView: View {
 
 /// デフォルトのプレースホルダービュー
 ///
-/// 読み込み開始前に表示するシンプルなビューです。
+/// 読み込み開始前に表示するシンプルなビュー。半透明グレーで領域を確保する。
 public struct DefaultPlaceholderView: View {
     public init() {}
 

@@ -4,12 +4,12 @@
 
 ## Overview
 
-`CachedRemoteImage` は iOS 17+ / macOS 14+ 向けの SwiftUI 画像ローディングパッケージです。
-ネットワーク越しの画像をメモリキャッシュとディスクキャッシュの二層で管理し、宣言的な API で画像表示のライフサイクル全体 — プレースホルダー・ローディング・成功・エラー — を処理します。
+`CachedRemoteImage` は iOS 17+ / macOS 14+ 向けの SwiftUI 画像ローディングパッケージ。
+ネットワーク越しの画像をメモリキャッシュとディスクキャッシュの二層で管理し、宣言的な API で画像表示のライフサイクル全体 — プレースホルダー・ローディング・成功・エラー — を処理する。
 
 ### 最も簡単な使い方
 
-``CachedRemoteImage`` は ``ImageSource`` を受け取り、すべての状態をデフォルトビューで処理します。
+``CachedRemoteImage`` は ``ImageSource`` を受け取り、すべての状態をデフォルトビューで処理する。
 
 ```swift
 import CachedRemoteImage
@@ -28,8 +28,8 @@ CachedRemoteImage(source: .url(imageURL)) { image in
 
 ### ImageService の注入
 
-画像の取得・キャッシュ・アップロードは ``ImageService`` プロトコルで抽象化されています。
-`View.imageService(_:)` モディファイアでルートビューに一度だけ注入します。
+画像の取得・キャッシュ・アップロードは ``ImageService`` プロトコルで抽象化されている。
+`View.imageService(_:)` モディファイアでルートビューに一度だけ注入する。
 
 ```swift
 import CachedRemoteImage
@@ -50,8 +50,8 @@ ContentView()
 
 ### キャッシュとリトライの設定
 
-``CachedRemoteImageConfiguration`` でキャッシュ戦略とリトライ動作を制御します。
-パッケージには `standard`（全キャッシュ）・`noCache`・`withRetry` の 3 つのプリセットが用意されています。
+``CachedRemoteImageConfiguration`` でキャッシュ戦略とリトライ動作を制御する。
+パッケージには `standard`（全キャッシュ）・`noCache`・`withRetry` の 3 つのプリセットが用意されている。
 
 ```swift
 // ネットワーク不安定環境向け：指数バックオフでリトライ
@@ -72,7 +72,7 @@ CachedRemoteImage(
 
 ### 完全なカスタマイズ
 
-ローディング・エラー・プレースホルダーをすべて差し替える場合はフルイニシャライザを使います。
+ローディング・エラー・プレースホルダーをすべて差し替える場合はフルイニシャライザを使う。
 
 ```swift
 CachedRemoteImage(
