@@ -19,14 +19,20 @@ internal final class ImageDataCache: @unchecked Sendable {
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
 
-    init() {
+    /// - Parameter cacheDirectory: ディスクキャッシュの保存先。`nil` の場合は
+    ///   ユーザーの Caches ディレクトリ配下 `CachedRemoteImage/` を使用する（テストでは一時ディレクトリを注入する）。
+    init(cacheDirectory: URL? = nil) {
         // キャッシュディレクトリの設定
-        let paths = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)
-        cacheDirectory = paths[0].appendingPathComponent("CachedRemoteImage")
+        if let cacheDirectory {
+            self.cacheDirectory = cacheDirectory
+        } else {
+            let paths = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)
+            self.cacheDirectory = paths[0].appendingPathComponent("CachedRemoteImage")
+        }
 
         // ディレクトリ作成
-        if !fileManager.fileExists(atPath: cacheDirectory.path) {
-            try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        if !fileManager.fileExists(atPath: self.cacheDirectory.path) {
+            try? fileManager.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
         }
 
         // メモリキャッシュの設定

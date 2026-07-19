@@ -27,7 +27,10 @@ let package = Package(
         ),
         .testTarget(
             name: "CachedRemoteImageTests",
-            dependencies: ["CachedRemoteImage"],
+            dependencies: [
+                "CachedRemoteImage",
+                .product(name: "APIClient", package: "swift-api-client")
+            ],
             path: "Tests"
         )
     ]
