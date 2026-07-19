@@ -16,7 +16,7 @@ struct GetImageResourceContract: APIContract, APIInput {
     var pathParameters: [String: String] { [:] }
     var queryParameters: [String: String]? { nil }
 
-    func encodeBody(using encoder: JSONEncoder) throws -> Data? { nil }
+    func encodeBody(using encoder: any APIBodyEncoder) throws -> Data? { nil }
 
     static func resolvePath(with input: Self) -> String {
         "\(input.basePath)/\(input.imageId)"
@@ -26,7 +26,7 @@ struct GetImageResourceContract: APIContract, APIInput {
         pathParameters: [String: String],
         queryParameters: [String: String],
         body: Data?,
-        decoder: JSONDecoder
+        decoder: any APIBodyDecoder
     ) throws -> Self {
         fatalError("Client-only contract")
     }
@@ -59,7 +59,7 @@ struct UploadImageContract: APIContract, APIInput {
     var pathParameters: [String: String] { [:] }
     var queryParameters: [String: String]? { nil }
 
-    func encodeBody(using encoder: JSONEncoder) throws -> Data? {
+    func encodeBody(using encoder: any APIBodyEncoder) throws -> Data? {
         // Base64エンコードしてJSON形式で送信
         let base64String = imageData.base64EncodedString()
         let requestBody = UploadImageRequestBody(
@@ -77,7 +77,7 @@ struct UploadImageContract: APIContract, APIInput {
         pathParameters: [String: String],
         queryParameters: [String: String],
         body: Data?,
-        decoder: JSONDecoder
+        decoder: any APIBodyDecoder
     ) throws -> Self {
         fatalError("Client-only contract")
     }
@@ -98,7 +98,7 @@ struct DeleteImageContract: APIContract, APIInput {
     var pathParameters: [String: String] { [:] }
     var queryParameters: [String: String]? { nil }
 
-    func encodeBody(using encoder: JSONEncoder) throws -> Data? { nil }
+    func encodeBody(using encoder: any APIBodyEncoder) throws -> Data? { nil }
 
     static func resolvePath(with input: Self) -> String {
         "\(input.basePath)/\(input.imageId)"
@@ -108,7 +108,7 @@ struct DeleteImageContract: APIContract, APIInput {
         pathParameters: [String: String],
         queryParameters: [String: String],
         body: Data?,
-        decoder: JSONDecoder
+        decoder: any APIBodyDecoder
     ) throws -> Self {
         fatalError("Client-only contract")
     }
