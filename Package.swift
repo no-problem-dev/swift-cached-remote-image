@@ -15,7 +15,7 @@ let package = Package(
             targets: ["CachedRemoteImage"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/no-problem-dev/swift-api-client.git", from: "2.3.1"),
+        .package(url: "https://github.com/no-problem-dev/swift-api-client.git", from: "3.0.0"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", .upToNextMajor(from: "1.4.0"))
     ],
     targets: [
