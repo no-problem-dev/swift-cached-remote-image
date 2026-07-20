@@ -43,6 +43,23 @@ public protocol ImageService: Sendable {
     @MainActor
     func loadImage(from url: URL) async -> PlatformImage?
 
+    /// 画像IDから画像を読み込み（メモリ＋ディスクキャッシュ対応）
+    ///
+    /// 公開 URL を持たないバックエンド（非公開ストレージ・認証付きで画像バイト列を返す API）
+    /// 向けの経路。メタデータに URL が無い場合、`getImageResource` → `loadImage(from:)` の
+    /// 2 段階は成立しないため、この要件を実装して直接バイト列を取りに行く。
+    ///
+    /// 既定実装は従来どおり `getImageResource` で URL を引いて `loadImage(from:)` に委ねるので、
+    /// URL を返せるバックエンドの実装者は何もしなくてよい。
+    ///
+    /// - Parameter imageId: 画像ID
+    /// - Returns: プラットフォーム画像（読み込めなかった場合は nil）
+    /// - Throws: 画像を特定できなかった原因（メタデータ取得の失敗など）。
+    ///   `nil` は「取得はできたが画像にならなかった」を意味し、失敗の原因は throw で伝える
+    /// - Note: MainActorで実行されます（PlatformImageは非Sendableのため）
+    @MainActor
+    func loadImage(imageId: String) async throws -> PlatformImage?
+
     /// 画像をアップロード
     ///
     /// - Parameter imageData: 画像データ（JPEG推奨）
@@ -73,4 +90,17 @@ public protocol ImageService: Sendable {
 
     /// ディスクキャッシュサイズを取得（バイト単位）
     func diskCacheSize() async -> Int64
+}
+
+extension ImageService {
+    /// URL を返せるバックエンド向けの既定実装（メタデータ取得 → URL ダウンロード）。
+    ///
+    /// `getImageResource` の失敗はここで握りつぶさず、そのまま伝播させる。
+    /// 握りつぶして `nil` にすると、呼び出し側は原因が分からないまま
+    /// 「ダウンロード失敗」として扱うことになる。
+    @MainActor
+    public func loadImage(imageId: String) async throws -> PlatformImage? {
+        let resource = try await getImageResource(imageId: imageId)
+        return await loadImage(from: resource.url)
+    }
 }

@@ -71,21 +71,23 @@ internal final class CachedRemoteImageLoader {
             return image
         }
 
-        // imageIdから取得（2段階: リソース取得 → 画像ダウンロード）
+        // imageId から取得。URL を返せるバックエンドでは既定実装が
+        // メタデータ経由で URL を引くので、従来の 2 段階と同じ動きになる
         guard let imageId = source.imageId else {
             throw ImageLoadError.invalidURL("Invalid image source")
         }
 
-        // 1. 画像リソース（URL含む）を取得
-        let imageResource: ImageResource
+        let loaded: PlatformImage?
         do {
-            imageResource = try await imageService.getImageResource(imageId: imageId)
+            loaded = try await imageService.loadImage(imageId: imageId)
+        } catch let error as ImageLoadError {
+            // サービス側が原因を特定できているならそのまま伝える
+            throw error
         } catch {
             throw ImageLoadError.metadataFetchFailed(error.localizedDescription)
         }
 
-        // 2. URLから画像をロード
-        guard let image = await imageService.loadImage(from: imageResource.url) else {
+        guard let image = loaded else {
             throw ImageLoadError.downloadFailed
         }
 
