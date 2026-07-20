@@ -9,6 +9,17 @@
 
 なし
 
+## [1.1.6] - 2026-07-20
+
+### 追加
+- `ImageService.loadImage(imageId:)` — 公開 URL を持たないバックエンド向けの読み込み経路
+  - 非公開ストレージ（認証付きで画像バイト列を返す API）では、これまでの
+    「メタデータから URL を引いて素の URLSession で取る」2 段階が成立しなかった
+  - 既定実装は従来どおり `getImageResource` → `loadImage(from:)` に委ねるので、
+    URL を返せるバックエンドの利用者は何も変わらない（互換性テスト 2 本を追加）
+  - `CachedRemoteImage(source: .imageId(...))` は新しい経路を通る。
+    `.url` / `.urlString` は従来どおり
+
 ## [1.1.5] - 2026-01-18
 
 ### 変更
@@ -112,7 +123,8 @@
 - キャッシュ管理
 - iOS 17.0+ および macOS 14.0+ サポート
 
-[未リリース]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.5...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.6...HEAD
+[1.1.6]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.2...v1.1.3

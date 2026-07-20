@@ -37,6 +37,17 @@ public protocol ImageService: Sendable {
     @MainActor
     func loadImage(from url: URL) async -> PlatformImage?
 
+    /// 画像IDから画像を読み込み（メモリ＋ディスクキャッシュ対応）
+    ///
+    /// 公開URLを持たないバックエンド（非公開ストレージ・認証付き取得）向けの経路。
+    /// 既定実装はメタデータからURLを引いて `loadImage(from:)` に委ねるので、
+    /// URLを返せるバックエンドでは何も変わらない。
+    ///
+    /// - Parameter imageId: 画像ID
+    /// - Returns: プラットフォーム画像（失敗時はnil）
+    @MainActor
+    func loadImage(imageId: String) async -> PlatformImage?
+
     /// 画像をアップロード
     ///
     /// - Parameter imageData: 画像データ（JPEG推奨）
@@ -67,4 +78,13 @@ public protocol ImageService: Sendable {
 
     /// ディスクキャッシュサイズを取得（バイト単位）
     func getCacheSize() async -> Int64
+}
+
+extension ImageService {
+    /// URLを返せるバックエンド向けの既定実装（メタデータ取得 → URL ダウンロード）
+    @MainActor
+    public func loadImage(imageId: String) async -> PlatformImage? {
+        guard let resource = try? await getImageResource(imageId: imageId) else { return nil }
+        return await loadImage(from: resource.url)
+    }
 }
