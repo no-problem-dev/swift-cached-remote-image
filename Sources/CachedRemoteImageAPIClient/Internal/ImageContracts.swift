@@ -1,7 +1,7 @@
-import Foundation
 import APIClient
+import Foundation
 
-// MARK: - Get Image Resource Contract
+// MARK: - Get Image Resource
 
 struct GetImageResourceContract: APIContract, APIInput {
     typealias Input = Self
@@ -32,19 +32,12 @@ struct GetImageResourceContract: APIContract, APIInput {
     }
 }
 
-// MARK: - Upload Image Contract
+// MARK: - Upload Image
 
-/// アップロードリクエストボディ（Base64エンコード）
-struct UploadImageRequestBody: Codable {
-    let imageData: String
-    let contentType: String
-
-    enum CodingKeys: String, CodingKey {
-        case imageData = "image_data"
-        case contentType = "content_type"
-    }
-}
-
+/// 画像アップロード（`multipart/form-data`）
+///
+/// 境界文字列はインスタンスが持つ。ヘッダーとボディで同じ値を使う必要があり、
+/// それぞれが別々に生成すると食い違うため
 struct UploadImageContract: APIContract, APIInput {
     typealias Input = Self
     typealias Output = ImageResourceDTO
@@ -55,18 +48,41 @@ struct UploadImageContract: APIContract, APIInput {
     let basePath: String
     let imageData: Data
     let contentType: String
+    let fieldName: String
+    let boundary: String
+
+    init(
+        basePath: String,
+        imageData: Data,
+        contentType: String,
+        fieldName: String,
+        boundary: String = MultipartFormData().boundary
+    ) {
+        self.basePath = basePath
+        self.imageData = imageData
+        self.contentType = contentType
+        self.fieldName = fieldName
+        self.boundary = boundary
+    }
+
+    private var form: MultipartFormData { MultipartFormData(boundary: boundary) }
 
     var pathParameters: [String: String] { [:] }
     var queryParameters: [String: String]? { nil }
 
+    /// ボディがあると APIClient は既定で `application/json` を付ける。
+    /// エンドポイント固有ヘッダーはそれより後に適用されるので、ここで上書きできる
+    var additionalHeaders: [String: String] {
+        ["Content-Type": form.contentTypeHeaderValue]
+    }
+
     func encodeBody(using encoder: any APIBodyEncoder) throws -> Data? {
-        // Base64エンコードしてJSON形式で送信
-        let base64String = imageData.base64EncodedString()
-        let requestBody = UploadImageRequestBody(
-            imageData: base64String,
-            contentType: contentType
+        form.body(
+            fieldName: fieldName,
+            fileName: MultipartFormData.fileName(for: contentType),
+            contentType: contentType,
+            data: imageData
         )
-        return try encoder.encode(requestBody)
     }
 
     static func resolvePath(with input: Self) -> String {
@@ -83,7 +99,7 @@ struct UploadImageContract: APIContract, APIInput {
     }
 }
 
-// MARK: - Delete Image Contract
+// MARK: - Delete Image
 
 struct DeleteImageContract: APIContract, APIInput {
     typealias Input = Self

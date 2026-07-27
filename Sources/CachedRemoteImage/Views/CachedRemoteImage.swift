@@ -19,18 +19,21 @@ import SwiftUI
 /// }
 /// ```
 ///
-/// Environment設定:
+/// 環境設定（ルートビューで一度だけ）:
 /// ```swift
 /// ContentView()
-///     .environment(\.imageService, imageService)
+///     .imageLibrary(library)
 /// ```
+///
+/// キャッシュと再試行の設定は ``ImageLibrary`` を作るときに決める。
+/// ビューごとには渡さない — キャッシュはライブラリが一つ持つ資源で、
+/// ビュー単位で切り替えられる性質のものではないため。
 public struct CachedRemoteImage<Content: View, Loading: View, ErrorView: View, Placeholder: View>: View {
-    @Environment(\.imageService) private var imageService
+    @Environment(\.imageLibrary) private var imageLibrary
     @State private var loader: CachedRemoteImageLoader?
 
     private let source: ImageSource
     private let contentMode: ContentMode
-    private let configuration: CachedRemoteImageConfiguration
     private let content: (Image) -> Content
     private let loading: () -> Loading
     private let error: (ImageLoadError) -> ErrorView
@@ -41,7 +44,6 @@ public struct CachedRemoteImage<Content: View, Loading: View, ErrorView: View, P
     /// - Parameters:
     ///   - source: 画像の取得元
     ///   - contentMode: 画像の表示モード（デフォルト: .fit）
-    ///   - configuration: キャッシュとリトライの設定（デフォルト: .standard）
     ///   - content: 読み込み成功時に画像を表示するビルダー
     ///   - loading: 読み込み中に表示するビルダー
     ///   - error: エラー発生時に表示するビルダー
@@ -49,7 +51,6 @@ public struct CachedRemoteImage<Content: View, Loading: View, ErrorView: View, P
     public init(
         source: ImageSource,
         contentMode: ContentMode = .fit,
-        configuration: CachedRemoteImageConfiguration = .standard,
         @ViewBuilder content: @escaping (Image) -> Content,
         @ViewBuilder loading: @escaping () -> Loading,
         @ViewBuilder error: @escaping (ImageLoadError) -> ErrorView,
@@ -57,7 +58,6 @@ public struct CachedRemoteImage<Content: View, Loading: View, ErrorView: View, P
     ) {
         self.source = source
         self.contentMode = contentMode
-        self.configuration = configuration
         self.content = content
         self.loading = loading
         self.error = error
@@ -88,15 +88,9 @@ public struct CachedRemoteImage<Content: View, Loading: View, ErrorView: View, P
             }
         }
         .task(id: source) {
-            guard let imageService = imageService else {
-                print("⚠️ ImageService not configured. Please inject via .environment(\\.imageService, service)")
-                return
-            }
-            let newLoader = CachedRemoteImageLoader(
-                imageService: imageService,
-                source: source,
-                configuration: configuration
-            )
+            // ライブラリ未注入もローダーに渡す。ここで握って return すると
+            // 「何も出ないが理由はどこにも無い」状態になる
+            let newLoader = CachedRemoteImageLoader(library: imageLibrary, source: source)
             self.loader = newLoader
             await newLoader.load()
         }
@@ -114,20 +108,17 @@ extension CachedRemoteImage where Loading == DefaultLoadingView, ErrorView == De
     /// - Parameters:
     ///   - source: 画像の取得元
     ///   - contentMode: 画像の表示モード（デフォルト: .fit）
-    ///   - configuration: キャッシュとリトライの設定（デフォルト: .standard）
     ///   - content: 画像を表示するビルダー
     ///   - placeholder: 読み込み開始前に表示するビュー
     public init(
         source: ImageSource,
         contentMode: ContentMode = .fit,
-        configuration: CachedRemoteImageConfiguration = .standard,
         @ViewBuilder content: @escaping (Image) -> Content,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.init(
             source: source,
             contentMode: contentMode,
-            configuration: configuration,
             content: content,
             loading: { DefaultLoadingView() },
             error: { DefaultErrorView(error: $0) },
@@ -144,18 +135,15 @@ extension CachedRemoteImage where Loading == DefaultLoadingView, ErrorView == De
     /// - Parameters:
     ///   - source: 画像の取得元
     ///   - contentMode: 画像の表示モード（デフォルト: .fit）
-    ///   - configuration: キャッシュとリトライの設定（デフォルト: .standard）
     ///   - content: 画像を表示するビルダー
     public init(
         source: ImageSource,
         contentMode: ContentMode = .fit,
-        configuration: CachedRemoteImageConfiguration = .standard,
         @ViewBuilder content: @escaping (Image) -> Content
     ) {
         self.init(
             source: source,
             contentMode: contentMode,
-            configuration: configuration,
             content: content,
             loading: { DefaultLoadingView() },
             error: { DefaultErrorView(error: $0) },
@@ -172,16 +160,13 @@ extension CachedRemoteImage where Content == Image, Loading == DefaultLoadingVie
     /// - Parameters:
     ///   - source: 画像の取得元
     ///   - contentMode: 画像の表示モード（デフォルト: .fit）
-    ///   - configuration: キャッシュとリトライの設定（デフォルト: .standard）
     public init(
         source: ImageSource,
-        contentMode: ContentMode = .fit,
-        configuration: CachedRemoteImageConfiguration = .standard
+        contentMode: ContentMode = .fit
     ) {
         self.init(
             source: source,
             contentMode: contentMode,
-            configuration: configuration,
             content: { $0.resizable() },
             loading: { DefaultLoadingView() },
             error: { DefaultErrorView(error: $0) },
@@ -192,43 +177,23 @@ extension CachedRemoteImage where Content == Image, Loading == DefaultLoadingVie
 
 // MARK: - Environment Support
 
-/// ImageService用のEnvironmentKey
-struct ImageServiceKey: EnvironmentKey {
-    static var defaultValue: ImageService? {
-        nil
-    }
+private struct ImageLibraryKey: EnvironmentKey {
+    static let defaultValue: ImageLibrary? = nil
 }
 
 public extension EnvironmentValues {
-    /// 画像サービスの環境値。`View.imageService(_:)` モディファイアで注入する。
-    var imageService: ImageService? {
-        get { self[ImageServiceKey.self] }
-        set { self[ImageServiceKey.self] = newValue }
-    }
-}
-
-// MARK: - View Modifier for ImageService Injection
-
-/// ImageServiceを注入するためのViewModifier
-/// パッケージ境界を越えて環境値を確実に伝播させるために使用
-struct ImageServiceModifier: ViewModifier {
-    private let imageService: ImageService
-
-    init(imageService: ImageService) {
-        self.imageService = imageService
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .environment(\.imageService, imageService)
+    /// 画像ライブラリの環境値。`View.imageLibrary(_:)` モディファイアで注入する。
+    var imageLibrary: ImageLibrary? {
+        get { self[ImageLibraryKey.self] }
+        set { self[ImageLibraryKey.self] = newValue }
     }
 }
 
 public extension View {
-    /// ImageServiceを注入する
-    /// - Parameter imageService: 使用するImageServiceインスタンス
-    /// - Returns: ImageServiceが注入されたView
-    func imageService(_ imageService: ImageService) -> some View {
-        modifier(ImageServiceModifier(imageService: imageService))
+    /// ``ImageLibrary`` を注入する。ルートビューで一度だけ呼ぶ
+    ///
+    /// - Parameter library: 使用する ``ImageLibrary``
+    func imageLibrary(_ library: ImageLibrary) -> some View {
+        environment(\.imageLibrary, library)
     }
 }

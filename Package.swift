@@ -10,9 +10,15 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
+        // ビューと protocol。APIClient に依存しないので、
+        // Infrastructure を知らない Presentation 層がこれだけを取れる
         .library(
             name: "CachedRemoteImage",
             targets: ["CachedRemoteImage"]),
+        // APIClient を使う既定の ImageTransport 実装
+        .library(
+            name: "CachedRemoteImageAPIClient",
+            targets: ["CachedRemoteImageAPIClient"]),
     ],
     dependencies: [
         .package(url: "https://github.com/no-problem-dev/swift-api-client.git", from: "3.0.0"),
@@ -20,18 +26,25 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "CachedRemoteImage",
+            name: "CachedRemoteImage"
+        ),
+        .target(
+            name: "CachedRemoteImageAPIClient",
             dependencies: [
+                "CachedRemoteImage",
                 .product(name: "APIClient", package: "swift-api-client")
             ]
         ),
         .testTarget(
             name: "CachedRemoteImageTests",
+            dependencies: ["CachedRemoteImage"]
+        ),
+        .testTarget(
+            name: "CachedRemoteImageAPIClientTests",
             dependencies: [
-                "CachedRemoteImage",
+                "CachedRemoteImageAPIClient",
                 .product(name: "APIClient", package: "swift-api-client")
-            ],
-            path: "Tests"
+            ]
         )
     ]
 )

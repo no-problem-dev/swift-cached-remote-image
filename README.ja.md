@@ -13,19 +13,46 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 
 ## 概要
 
-`swift-cached-remote-image` は、SwiftUI でリモート画像を効率的に読み込み、メモリとディスクキャッシュの二層で管理するパッケージ。非同期画像読み込み、リトライポリシー、カスタマイズ可能なプレースホルダーなどの機能を提供する。
+**画像の取り方はアプリが与え、キャッシュはパッケージが持つ。**
+
+認証・エンドポイント・レスポンス形式はアプリごとに違い、パッケージが当てられる場所ではない。
+一方でキャッシュ・再試行・SwiftUI の読み込み状態はどこでも同じで、毎回書き直すものではない。
+
+だからアプリが実装するのは 3 メソッドだけ:
+
+```swift
+public protocol ImageTransport: Sendable {
+    func fetch(id: String) async throws -> Data
+    func upload(_ data: Data, contentType: String) async throws -> String  // → image id
+    func delete(id: String) async throws
+}
+```
+
+これを `ImageLibrary` に渡すと、**画像 ID をキーにした** 2 層キャッシュ・再試行・先読み・
+ウィジェット向けの同期読み・`CachedRemoteImage` ビューが付いてくる。
+
+メタデータ API が公開 URL を返す形のバックエンドなら、`URLImageTransport` を同梱しているので
+transport を書く必要はない。
 
 ### 主な機能
 
-- ✅ **SwiftUI ネイティブな API** — SwiftUI と完全に統合された使いやすいインターフェース
-- ✅ **メモリ & ディスクキャッシュ** — 自動的な二層キャッシュで高速表示
-- ✅ **非同期画像読み込み** — async/await を使った現代的な並行処理
-- ✅ **柔軟な ImageSource** — URL、URL 文字列、画像 ID から読み込み可能
-- ✅ **画像 ID サポート** — ImageService 経由でリソースから画像を取得
-- ✅ **カスタマイズ可能なリトライポリシー** — 固定回数、指数バックオフなど
-- ✅ **プレースホルダーとエラー表示のカスタマイズ** — 完全に差し替え可能な UI
-- ✅ **キャッシュ管理** — リソースとデータキャッシュの個別管理
-- ✅ **iOS 17.0+ および macOS 14.0+ 対応** — クロスプラットフォームサポート
+- ✅ **非公開ストレージで使える** — 認証付きでバイト列を返す API が例外ではなく既定の想定
+- ✅ **画像 ID をキーにした 2 層キャッシュ** — メモリに復号済み画像、ディスクに受け取ったバイト列
+- ✅ **ウィジェット対応** — App Group への保存と、ネットワークに出ない同期読み
+- ✅ **層を守れるモジュール分割** — ビュー側のモジュールは `APIClient` に依存しない
+- ✅ **失敗が呼び出し側に届く** — `print` や黙った `nil` に落とさない
+- ✅ **リトライポリシー** — 固定回数・指数バックオフ
+- ✅ **プレースホルダーとエラー表示のカスタマイズ** — 完全に差し替え可能
+- ✅ **iOS 17.0+ / macOS 14.0+**
+
+### モジュール
+
+| モジュール | 中身 | 依存 |
+|---|---|---|
+| `CachedRemoteImage` | ビュー・`ImageTransport`・`ImageLibrary`・`ImageDiskCache`・設定 | なし |
+| `CachedRemoteImageAPIClient` | `URLImageTransport`（メタデータ API → URL → URLSession） | `APIClient` |
+
+分けてあるのは、画像を描くだけの Presentation 層が HTTP クライアントを巻き込まないようにするため。
 
 ## 必要要件
 
@@ -33,198 +60,207 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 - macOS 14.0+
 - Swift 6.0+
 
-## 依存関係
-
-- [swift-api-client](https://github.com/no-problem-dev/swift-api-client) — HTTP クライアント
-
-## 前提条件
-
-このパッケージを `.imageId` で使用する場合、**指定された形式のレスポンスを返す REST API** が必要。
-
-### 必須 API エンドポイント
-
-1. **GET `/images/{imageId}`** — 画像リソース取得
-2. **POST `/images`** — 画像アップロード（Base64-encoded JSON）
-3. **DELETE `/images/{imageId}`** — 画像削除
-
-### 必須レスポンス形式（JSON）
-
-```json
-{
-  "id": "img_123",
-  "url": "https://example.com/images/photo.jpg"
-}
-```
-
-URL 直接指定（`.url` / `.urlString`）の場合は、API サーバーは不要。
-
 ## インストール
-
-### Swift Package Manager
-
-`Package.swift` に以下を追加する：
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "1.1.5")
+    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.0")
 ]
 ```
 
-または Xcode で：
-1. File > Add Package Dependencies
-2. パッケージ URL を入力: `https://github.com/no-problem-dev/swift-cached-remote-image.git`
-3. バージョンを選択: `1.1.5` 以降
+使うモジュールを依存に足す:
+
+```swift
+.product(name: "CachedRemoteImage", package: "swift-cached-remote-image"),
+// 同梱の URL ベース transport を使う場合だけ
+.product(name: "CachedRemoteImageAPIClient", package: "swift-cached-remote-image"),
+```
 
 ## クイックスタート
 
-最もシンプルな使用例：
+### 1. transport を実装する
 
 ```swift
-import SwiftUI
 import CachedRemoteImage
 
-CachedRemoteImage(
-    source: .url(URL(string: "https://example.com/image.jpg")!)
-)
-```
+struct MyImageTransport: ImageTransport {
+    let api: MyAPIClient
 
-これだけで、画像の読み込み、キャッシュ、デフォルトのローディング表示が行われる。
+    func fetch(id: String) async throws -> Data {
+        try await api.getImage(id: id)
+    }
 
-## 使い方
+    func upload(_ data: Data, contentType: String) async throws -> String {
+        try await api.uploadImage(data, contentType: contentType).id
+    }
 
-### 基本的な使用例
-
-```swift
-import SwiftUI
-import CachedRemoteImage
-
-struct ContentView: View {
-    var body: some View {
-        CachedRemoteImage(
-            source: .url(URL(string: "https://example.com/image.jpg")!)
-        ) { image in
-            image
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-        } placeholder: {
-            ProgressView()
-        }
+    func delete(id: String) async throws {
+        try await api.deleteImage(id: id)
     }
 }
 ```
 
-### URL 文字列から直接使用
+### 2. ライブラリを作って注入する
 
 ```swift
-CachedRemoteImage(
-    source: .urlString("https://example.com/image.jpg")
-) { image in
-    image.resizable()
-}
-```
-
-### ImageSource の種類
-
-```swift
-// 1. URL オブジェクトから
-let url = URL(string: "https://example.com/image.jpg")!
-CachedRemoteImage(source: .url(url))
-
-// 2. URL 文字列から（自動的に URL に変換）
-CachedRemoteImage(source: .urlString("https://example.com/image.jpg"))
-
-// 3. 画像 ID から（ImageService 経由でリソースを取得）
-CachedRemoteImage(source: .imageId("img_12345"))
-```
-
-> **注意**: `.imageId` を使用する場合は、`ImageService` を環境に注入する必要がある。
-
-### ImageService を使った画像 ID からの取得
-
-```swift
-import APIClient
-import CachedRemoteImage
-
 @main
 struct MyApp: App {
-    let imageService: ImageService
+    private let library: ImageLibrary
 
-    init() {
-        let apiClient = APIClientImpl(baseURL: URL(string: "https://api.example.com")!)
-        imageService = ImageServiceImpl(
-            apiClient: apiClient,
-            imagesPath: "/images",
-            maxResourceCacheSize: 100
-        )
+    init() throws {
+        library = try ImageLibrary(transport: MyImageTransport(api: api))
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .imageService(imageService)
-        }
-    }
-}
-
-struct ImageView: View {
-    let imageId: String
-
-    var body: some View {
-        CachedRemoteImage(
-            source: .imageId(imageId)
-        ) { image in
-            image
-                .resizable()
-                .aspectRatio(contentMode: .fit)
+                .imageLibrary(library)
         }
     }
 }
 ```
 
-## キャッシュ設定
+`ImageLibrary.init` はキャッシュの置き場所を解決できないと throw する（App Group の
+entitlement 忘れなど）。設定ミスなので、黙って別の場所に落とすとウィジェットが
+何も出せない理由が最後まで分からなくなる。
 
-### リソースキャッシュサイズの設定
+### 3. 表示する
 
 ```swift
-let imageService = ImageServiceImpl(
-    apiClient: apiClient,
-    imagesPath: "/images",
-    maxResourceCacheSize: 200  // リソースキャッシュ: 最大 200 エントリ
+CachedRemoteImage(source: .imageId("img_12345"))
+
+CachedRemoteImage(source: .imageId("img_12345"), contentMode: .fill) { image in
+    image.resizable()
+} placeholder: {
+    Color.gray.opacity(0.2)
+}
+```
+
+`ImageSource` は 3 種類:
+
+```swift
+CachedRemoteImage(source: .imageId("img_12345"))                        // ImageTransport 経由
+CachedRemoteImage(source: .url(url))                                    // 素の URLSession
+CachedRemoteImage(source: .urlString("https://example.com/a.jpg"))      // 素の URLSession
+```
+
+`.url` / `.urlString` は transport を通らない。URL は宛先を自分で名乗っているので、
+アプリ固有の取り方を挟む余地がない。認証の要らない画像（検索結果のサムネイルなど）に使う。
+
+## URL を返すバックエンド
+
+`GET /images/{id}` が `{ "id": ..., "url": ... }` を返す形なら、同梱の transport を渡す:
+
+```swift
+import CachedRemoteImageAPIClient
+
+let transport = URLImageTransport(apiClient: apiClient, imagesPath: "/v1/images")
+let library = try ImageLibrary(transport: transport)
+```
+
+必要なエンドポイント:
+
+| エンドポイント | ボディ | レスポンス |
+|---|---|---|
+| `GET {imagesPath}/{id}` | — | `{ "id": "img_123", "url": "https://..." }` |
+| `POST {imagesPath}` | `multipart/form-data`（フィールド名は既定 `file`） | 同じ形 |
+| `DELETE {imagesPath}/{id}` | — | — |
+
+フィールド名は `URLImageTransport(… uploadFieldName: "image")` で変えられる。
+
+ID → URL の解決は transport 内で LRU キャッシュする。画像バイト列のキャッシュは
+`ImageLibrary` 側にあるので、どんな transport でも同じように効く。
+
+## ウィジェット
+
+ウィジェット拡張は画像を自分で取れない。WidgetKit のタイムライン生成に非同期の
+ネットワーク取得を置く場所が無く、拡張に認証情報を持たせるのも筋が悪い。
+
+そこで、アプリが先読みし、ウィジェットはディスクを同期で読む。
+
+**アプリ側 — App Group を指定し、同期後に先読みする:**
+
+```swift
+let library = try ImageLibrary(
+    transport: MyImageTransport(api: api),
+    configuration: .appGroup("group.com.example.app")
+)
+
+let failed = await library.prefetch(topItems.map(\.imageId))
+```
+
+**ウィジェット側 — 同じ場所・transport 無し・ネットワーク無し:**
+
+```swift
+import CachedRemoteImage
+
+let cache = try ImageDiskCache(location: .appGroup("group.com.example.app"))
+
+if let data = cache.imageData(for: item.imageId), let image = UIImage(data: data) {
+    Image(uiImage: image).resizable()
+} else {
+    Text(item.emoji)          // 無いときに落ちる先を必ず用意する
+}
+```
+
+`ImageDiskCache` はネットワークに出る手段を持たないので、ウィジェットが取得待ちで固まることが
+起こりえない。`imageData(for:)` の `nil` は「まだ端末に無い」だけを意味する。
+
+両側とも同じ `ImageCacheLocation` の値からディレクトリを解決するので、パスがずれようがない。
+別々に組み立てると、1 文字違うだけでウィジェットが無表示になる。
+
+## キャッシュの設定
+
+```swift
+let library = try ImageLibrary(
+    transport: transport,
+    configuration: ImageLibraryConfiguration(
+        cacheLocation: .appGroup("group.com.example.app"),
+        diskCacheSizeLimit: 200 * 1024 * 1024,
+        memoryCountLimit: 200,
+        memoryCostLimit: 100 * 1024 * 1024,
+        retryPolicy: .exponentialBackoff(maxRetries: 3)
+    )
 )
 ```
 
-### キャッシュクリア
+プリセット: `.standard` / `.withRetry` / `.appGroup(_:subdirectory:)`。
+
+設定はビューごとではなくライブラリ単位。キャッシュは共有された 1 つの資源で、
+ビューが持つものではない。
+
+- **メモリ**は復号済みの画像を持つ。スクロール中に効くのは復号のスキップで、ファイル読み込みのスキップではない
+- **ディスク**は受け取ったバイト列をそのまま持つ。再エンコードしないので PNG の透過も残り、
+  ウィジェットが読むのも実物になる。`diskCacheSizeLimit` を超えたぶんは古い順に消える
+  （App Group は OS が消してくれないので、上限は入れる側が決める必要がある）
 
 ```swift
-// リソースキャッシュをクリア
-await imageService.clearResourceCache()
-
-// 画像データキャッシュをクリア
-await imageService.clearImageCache()
-
-// キャッシュサイズを取得
-let cacheSize = await imageService.diskCacheSize()
-print("Current cache size: \(cacheSize) bytes")
+library.clearMemoryCache()
+library.clearDiskCache()
+let bytes = library.diskCacheSize()
 ```
 
-### 画像ごとの設定（Configuration）
+## エラー
 
 ```swift
-CachedRemoteImage(
-    source: .url(imageURL),
-    configuration: CachedRemoteImageConfiguration(
-        cachePolicy: .metadataOnly,
-        retryPolicy: .exponentialBackoff(maxRetries: 3)
-    )
-) { image in
-    image.resizable()
+public enum ImageLoadError: Error, Equatable, Sendable {
+    case libraryNotConfigured          // 環境に .imageLibrary(_:) が無い
+    case invalidURL(String)
+    case transportFailed(reason: String)
+    case notAnImage(byteCount: Int)
 }
 ```
 
-利用可能な設定：
+どれもエラービューに届く。原因は説明文で運ぶ — 元のエラー型を持たせると `Sendable` と
+`Equatable` を諦めることになり、そして型で分岐したい側（トークンを取り直す・サインアウトさせる）は
+transport を書いた側なので、自分が投げたエラーをそこで捕まえられる。
 
-- **cachePolicy**: `.all`（デフォルト）, `.metadataOnly`, `.imageOnly`, `.none`
-- **retryPolicy**: `.none`（デフォルト）, `.fixed(count:)`, `.exponentialBackoff(maxRetries:, baseDelay:)`
+書き込み経路（`add` / `remove`）は transport が投げた型をそのまま通す。
+
+## 3.x からの移行
+
+`ImageService` / `ImageServiceImpl` は廃止した。破壊的変更の一覧と移行手順は
+[CHANGELOG.md](CHANGELOG.md) を参照。
 
 ## ライセンス
 

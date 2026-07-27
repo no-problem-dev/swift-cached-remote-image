@@ -3,21 +3,25 @@ import Foundation
 /// リトライ戦略を制御する列挙型
 ///
 /// ネットワークエラーなどの一時的な失敗時の再試行動作を制御する。
-/// ``CachedRemoteImageConfiguration`` の `retryPolicy` プロパティに渡して使う。
+/// ``ImageLibraryConfiguration`` の `retryPolicy` プロパティに渡して使う。
+///
+/// 再試行されるのは**取得の失敗**だけで、取れたバイト列が画像として復号できなかった場合
+/// （``ImageLoadError/notAnImage(byteCount:)``）は再試行しない。
+/// 同じバイト列を何度復号しても結果は変わらないため。
 ///
 /// ## 使用例
 /// ```swift
 /// // リトライしない（デフォルト）
-/// CachedRemoteImage(source: .url(imageURL))
+/// let library = try ImageLibrary(transport: transport)
 ///
 /// // 3回まで固定間隔でリトライ
-/// CachedRemoteImage(
-///     source: .url(imageURL),
-///     configuration: CachedRemoteImageConfiguration(retryPolicy: .fixed(count: 3))
+/// let library = try ImageLibrary(
+///     transport: transport,
+///     configuration: ImageLibraryConfiguration(retryPolicy: .fixed(count: 3))
 /// )
 ///
 /// // 指数バックオフでリトライ（推奨：ネットワーク負荷を軽減）
-/// CachedRemoteImage(source: .url(imageURL), configuration: .withRetry)
+/// let library = try ImageLibrary(transport: transport, configuration: .withRetry)
 /// ```
 public enum RetryPolicy: Equatable, Sendable {
     /// リトライしない
@@ -57,7 +61,7 @@ public enum RetryPolicy: Equatable, Sendable {
     ///
     /// - Parameter attemptNumber: 試行回数（0から始まる）
     /// - Returns: 待機時間（秒）
-    internal func delay(for attemptNumber: Int) async -> TimeInterval {
+    internal func delay(for attemptNumber: Int) -> TimeInterval {
         switch self {
         case .none:
             return 0

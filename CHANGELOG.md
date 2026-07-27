@@ -9,6 +9,212 @@
 
 なし
 
+## [4.0.0] - 2026-07-27
+
+責務の向きを逆にした。3.x はパッケージが「画像の取り方」を決め打ちし、キャッシュを
+その内側に隠していた。4.0 は**アプリが取り方を与え、キャッシュはパッケージが持つ**。
+
+### なぜ変えたか
+
+3.1.0 で `ImageService.loadImage(imageId:)` を足したが、実態は**入口だけで中身が無かった**。
+
+- `ImageServiceImpl` はこの要件を override しておらず、既定実装は
+  `getImageResource` → URL → `loadImage(from:)` に委ねる。公開 URL を持たない
+  バックエンドでは成立しない
+- 2 層キャッシュのキーが **URL 文字列**だったので、利用者が自分で書いた
+  `loadImage(imageId:)` からはキャッシュに一切乗らなかった
+
+結果、非公開ストレージを使う利用者は、キャッシュを自分で書き直し、
+`getImageResource` は「URL は無い」と throw し、`uploadImage` は実在しない URL を
+組み立てて返す — という、プロトコルを満たすためだけの実装を書くことになっていた。
+同じ形のバックエンドが 2 つ続いた時点で、これは例外ではなく**既定の想定が逆**だという証拠になる。
+
+### ⚠️ 破壊的変更
+
+#### 1. `ImageService` を廃止し、`ImageTransport` + `ImageLibrary` に置き換えた
+
+アプリが実装するのは 3 メソッドの `ImageTransport` だけになった。
+2 層キャッシュ・再試行・SwiftUI ビューへの供給は具象型 `ImageLibrary` が引き受ける。
+
+```swift
+public protocol ImageTransport: Sendable {
+    func fetch(id: String) async throws -> Data
+    func upload(_ data: Data, contentType: String) async throws -> String  // → image id
+    func delete(id: String) async throws
+}
+```
+
+**キャッシュのキーは画像 ID になった。** バイト列経路がそのまま 2 層キャッシュに乗る。
+
+- 削除: `ImageService` / `ImageServiceImpl` / `ImageResource`
+- 追加: `ImageTransport` / `ImageLibrary` / `ImageDiskCache` /
+  `ImageCacheLocation` / `ImageLibraryConfiguration`
+- 環境値と修飾子: `\.imageService` → `\.imageLibrary`、`.imageService(_:)` → `.imageLibrary(_:)`
+
+移行（非公開ストレージ・バイト列を返す API の場合）:
+
+```swift
+// Before: ImageService の 9 要件を満たすために ~130 行。半分がメモリキャッシュの手書き
+struct MyImageService: ImageService {
+    func getImageResource(imageId: String) async throws -> ImageResource {
+        throw ImageServiceError.noPublicURL       // URL が無いことを表明するためだけの実装
+    }
+    func uploadImage(imageData: Data, contentType: String) async throws -> ImageResource {
+        ImageResource(id: uploaded.id, url: placeholderURL(for: uploaded.id))  // 実在しない URL
+    }
+    // + loadImage(imageId:) / loadImage(from:) / deleteImage / clearResourceCache /
+    //   clearImageCache / diskCacheSize / 自前のメモリキャッシュ actor
+}
+
+// After: 3 メソッド
+struct MyImageTransport: ImageTransport {
+    let api: MyAPI
+    func fetch(id: String) async throws -> Data { try await api.getImage(id: id) }
+    func upload(_ data: Data, contentType: String) async throws -> String {
+        try await api.uploadImage(data, contentType: contentType).id
+    }
+    func delete(id: String) async throws { try await api.deleteImage(id: id) }
+}
+
+let library = try ImageLibrary(transport: MyImageTransport(api: api))
+ContentView().imageLibrary(library)
+```
+
+移行（URL を返す REST API の場合）— `CachedRemoteImageAPIClient` の
+`URLImageTransport` を渡すと従来と同じ経路で動く:
+
+```swift
+// Before
+let service = ImageServiceImpl(apiClient: apiClient, imagesPath: "/images", maxResourceCacheSize: 100)
+ContentView().imageService(service)
+
+// After
+let transport = URLImageTransport(apiClient: apiClient, imagesPath: "/images", maxURLCacheSize: 100)
+let library = try ImageLibrary(transport: transport)
+ContentView().imageLibrary(library)
+```
+
+#### 2. モジュールを 2 つに分けた
+
+`CachedRemoteImage` が `APIClient` に依存しなくなった。ビューを使うだけの
+Presentation 層が Infrastructure（HTTP クライアント）を巻き込まずに済む。
+
+| モジュール | 中身 | 依存 |
+|---|---|---|
+| `CachedRemoteImage` | ビュー・`ImageTransport`・`ImageLibrary`・`ImageDiskCache`・設定 | なし |
+| `CachedRemoteImageAPIClient` | `URLImageTransport`（メタデータ API → URL → URLSession） | `APIClient` |
+
+`URLImageTransport` を使う場合は `CachedRemoteImageAPIClient` も依存に足す:
+
+```swift
+.product(name: "CachedRemoteImage", package: "swift-cached-remote-image"),
+.product(name: "CachedRemoteImageAPIClient", package: "swift-cached-remote-image"),
+```
+
+#### 3. 設定はビューごとではなくライブラリ単位になった
+
+`CachedRemoteImageConfiguration` を廃止し、`ImageLibraryConfiguration` にした。
+`CachedRemoteImage(source:configuration:)` の `configuration` 引数も無くなった。
+
+キャッシュも再試行もライブラリが一つ持つ資源で、ビューごとに切り替えられる性質ではない。
+実際 `cachePolicy` はどこからも読まれておらず、**渡しても何も起きなかった**。
+
+```swift
+// Before（cachePolicy は無効。retryPolicy はビューごと）
+CachedRemoteImage(source: .imageId(id), configuration: .withRetry)
+
+// After（ライブラリを作るときに一度だけ。ビューを経由しない取得にも効く）
+let library = try ImageLibrary(transport: transport, configuration: .withRetry)
+```
+
+- 削除: `CachePolicy`（`.all` / `.metadataOnly` / `.imageOnly` / `.none`）— 実装されていなかった
+- 削除: `CachedRemoteImageConfiguration`
+- `RetryPolicy` は残る（`ImageLibraryConfiguration` に移動）
+
+#### 4. ディスクキャッシュの保存先を注入できるようにした
+
+App Group を指定できる。ウィジェット拡張が画像を読むために必要。
+
+```swift
+let library = try ImageLibrary(transport: transport, configuration: .appGroup("group.com.example.app"))
+```
+
+置き場所を解決できない場合、`ImageLibrary.init` は **throw する**（`ImageCacheLocationError`）。
+黙って別の場所に落とすと、ウィジェットが何も出せない理由が最後まで分からなくなるため。
+`ImageLibrary` の生成に `try` が要るようになった。
+
+#### 5. ディスクには受け取ったバイト列をそのまま保存する
+
+3.x は `UIImage` に復号してから JPEG q0.8 で再エンコードして書いていた。
+取得済みのバイト列を捨てて劣化した別のバイト列を作る動きで、PNG の透過も失われていた。
+4.0 は受け取った `Data` をそのまま書く。ウィジェットが読むのも実物のバイト列になる。
+
+キャッシュのファイル名も変わった（キーの SHA-256）。**3.x のディスクキャッシュは読めない。**
+初回起動時にキャッシュミスとして取り直されるだけで、消す処理は要らない。
+
+#### 6. アップロードが multipart になった
+
+`UploadImageContract` は Base64-in-JSON をやめ、`multipart/form-data` を送る。
+33% の膨張と全量のメモリ載せが無くなる。フィールド名は `URLImageTransport` の
+`uploadFieldName`（既定 `"file"`）で変えられる。
+
+**サーバー側が Base64 JSON（`image_data` / `content_type`）を期待している場合は、
+multipart を受けるように直す必要がある。**
+
+#### 7. 失敗の伝え方
+
+- `ImageLoadError` の case を入れ替えた: `.libraryNotConfigured` / `.invalidURL` /
+  `.transportFailed(reason:)` / `.notAnImage(byteCount:)`
+  （削除: `.metadataFetchFailed` / `.downloadFailed` / `.networkError` / `.unknown`）
+- `ImageLibrary` が未注入のとき、3.x は `print` して素通りしていた。
+  4.0 は `.failure(.libraryNotConfigured)` になり、エラービューに出る
+- `loadImage(from:)` の `catch { print; return nil }` を廃止。取得の失敗は throw する
+- `ImageResourceDTO` の URL 変換は `fatalError` をやめて throw する。
+  サーバーが壊れた値を返しただけでアプリが落ちることは無くなった
+- 表示経路（`image(for:)` / `image(from:)` / `imageData(for:)`）は `ImageLoadError` に包む。
+  書き込み経路（`add` / `remove`）は transport が投げた型をそのまま通す
+
+#### 8. キャッシュ管理 API
+
+```swift
+// Before                              // After
+await service.clearResourceCache()     library.clearMemoryCache()
+await service.clearImageCache()        library.clearDiskCache()
+await service.diskCacheSize()          library.diskCacheSize()
+```
+
+`async` ではなくなった（ファイル操作は同期で、待つものが無い）。
+
+### 追加
+
+- `ImageDiskCache` — ディスクを**同期で**読む型。ネットワークに出る手段を持たない。
+  WidgetKit のタイムライン生成のための入口
+
+  ```swift
+  let cache = try ImageDiskCache(location: .appGroup("group.com.example.app"))
+  if let data = cache.imageData(for: item.imageId) { /* 同期で読める */ }
+  ```
+
+- `ImageLibrary.cachedImageData(for:)` — アプリ本体側の同じ入口
+- `ImageLibrary.prefetch(_:)` — 表示予定の画像を先に端末へ落とす。
+  ウィジェットは認証を持てないので、アプリ側が置いておく。取れなかった ID を返す
+- `ImageCacheLocation` — 保存場所を値として渡す。アプリとウィジェットが
+  同じ値から解決するので、パスの綴りがずれようがない
+- ディスクキャッシュの上限（既定 100MB、超過分は古い順に削除）。
+  App Group は OS が消さない場所なので、上限を持たないと端末の空きが戻らない
+
+### 変更
+
+- `ImageSource` は `Hashable` にも準拠
+- `RetryPolicy.delay(for:)` は `async` をやめた（純粋な計算だった）
+- 再試行の対象は取得の失敗だけになった。復号できないバイト列（`.notAnImage`）は
+  再試行しない。同じバイト列を何度復号しても結果は変わらないため
+
+### テスト
+
+31 → 72。設計変更で意味を失ったテストは消し、新しい経路
+（ID キーのキャッシュ・同期読み・transport の差し替え・上限・multipart）に回帰を足した。
+
 ## [3.1.0] - 2026-07-20
 
 ### 追加
