@@ -7,6 +7,7 @@ A SwiftUI package for displaying remote images with memory and disk caching.
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-iOS%2017.0+%20%7C%20macOS%2014.0+-blue.svg)
 ![SPM](https://img.shields.io/badge/Swift_Package_Manager-compatible-brightgreen.svg)
+![Dependencies](https://img.shields.io/badge/Dependencies-none-brightgreen.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 📚 **[Full Documentation](https://no-problem-dev.github.io/swift-cached-remote-image/documentation/cachedremoteimage/)**
@@ -32,28 +33,33 @@ public protocol ImageTransport: Sendable {
 …and `ImageLibrary` gives you a two-layer cache keyed by **image id**, retries, prefetching,
 a synchronous disk read for widgets, and the `CachedRemoteImage` view.
 
-If your backend returns public URLs from a metadata endpoint, `URLImageTransport` ships with
-the package — you do not have to write a transport at all.
+### This package has no dependencies
+
+No default transport is bundled. You write it, and as the example below shows that takes about
+30 lines.
+
+It is not bundled because bundling one constrains your dependency resolution. The first cut of
+4.0 put a default transport — one built on an HTTP client — in a separate target, on the
+assumption that people who only use the views would never pull the dependency in. **That does
+not work.** SPM resolves dependencies **per package**, not per target. A dependency declared
+for a target you never build still enters your resolution space. In practice, an app already on
+a different generation of that HTTP client failed to resolve versions the moment it added this
+package — because of a target it was not using.
+
+Splitting only helps if you split the package itself. And `ImageTransport` is three methods; on
+top of an HTTP stack your app already has, it is a few lines. Shipping an implementation nobody
+uses is not worth constraining every consumer's dependency graph.
 
 ### Features
 
 - ✅ **Works with private storage** — an authenticated API returning raw bytes is the default case, not the exception
+- ✅ **Zero dependencies** — nothing enters your resolution space, so the package cannot collide with your HTTP client's generation
 - ✅ **Memory & disk cache keyed by image id** — decoded images in memory, the bytes you received on disk
 - ✅ **Widget-ready** — App Group storage plus a synchronous, network-free disk read
-- ✅ **Presentation-safe module split** — the view module does not depend on `APIClient`
 - ✅ **Failures reach the caller** — nothing is swallowed into a `print` or a silent `nil`
 - ✅ **Customizable retry policy** — fixed count or exponential backoff
 - ✅ **Customizable placeholder & error views** — fully replaceable UI
 - ✅ **iOS 17.0+ and macOS 14.0+**
-
-### Modules
-
-| Module | Contents | Depends on |
-|---|---|---|
-| `CachedRemoteImage` | Views, `ImageTransport`, `ImageLibrary`, `ImageDiskCache`, configuration | — |
-| `CachedRemoteImageAPIClient` | `URLImageTransport` (metadata API → URL → URLSession) | `APIClient` |
-
-The split exists so a Presentation layer that only draws images does not pull in an HTTP client.
 
 ## Requirements
 
@@ -69,22 +75,73 @@ dependencies: [
 ]
 ```
 
-Then add the module(s) you need:
+There is one product to add to your target:
 
 ```swift
 .product(name: "CachedRemoteImage", package: "swift-cached-remote-image"),
-// only if you use the bundled URL-based transport
-.product(name: "CachedRemoteImageAPIClient", package: "swift-cached-remote-image"),
 ```
 
 ## Quick Start
 
-### 1. Implement the transport
+### 1. Write the transport
+
+The default case this package is built for is **private storage** — an authenticated API that
+returns image bytes directly. `ImageTransport` needs three methods, and none of them needs
+caching or retries: the surrounding `ImageLibrary` owns those, and only calls you once it is
+certain the bytes are in neither memory nor disk.
 
 ```swift
 import CachedRemoteImage
+import Foundation
 
-struct MyImageTransport: ImageTransport {
+struct APIImageTransport: ImageTransport {
+    let baseURL: URL
+    let accessToken: @Sendable () async -> String
+
+    func fetch(id: String) async throws -> Data {
+        let request = await authorized("images/\(id)")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Self.checkOK(response)
+        return data
+    }
+
+    func upload(_ imageData: Data, contentType: String) async throws -> String {
+        var request = await authorized("images", method: "POST")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession.shared.upload(for: request, from: imageData)
+        try Self.checkOK(response)
+        return try JSONDecoder().decode(UploadedImage.self, from: data).id
+    }
+
+    func delete(id: String) async throws {
+        let request = await authorized("images/\(id)", method: "DELETE")
+        let (_, response) = try await URLSession.shared.data(for: request)
+        try Self.checkOK(response)
+    }
+
+    private func authorized(_ path: String, method: String = "GET") async -> URLRequest {
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = method
+        request.setValue("Bearer \(await accessToken())", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private struct UploadedImage: Decodable {
+        let id: String
+    }
+
+    private static func checkOK(_ response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+    }
+}
+```
+
+If your app already has an HTTP client, the three methods just sit on top of it:
+
+```swift
+struct APIImageTransport: ImageTransport {
     let api: MyAPIClient
 
     func fetch(id: String) async throws -> Data {
@@ -101,6 +158,12 @@ struct MyImageTransport: ImageTransport {
 }
 ```
 
+Throw whatever error type you like. On the display path it is wrapped into
+`ImageLoadError.transportFailed(reason:)`, but the description (`localizedDescription`)
+survives. Code that wants to branch on the type — catch an expired session, send the user to
+sign-in — belongs in the transport you wrote: it threw the error, so it holds the most
+information about it.
+
 ### 2. Build the library and inject it
 
 ```swift
@@ -109,7 +172,7 @@ struct MyApp: App {
     private let library: ImageLibrary
 
     init() throws {
-        library = try ImageLibrary(transport: MyImageTransport(api: api))
+        library = try ImageLibrary(transport: APIImageTransport(api: api))
     }
 
     var body: some Scene {
@@ -151,27 +214,33 @@ authentication — search-result thumbnails, for example.
 
 ## Backends That Return URLs
 
-If `GET /images/{id}` returns `{ "id": ..., "url": ... }`, use the bundled transport:
+If your metadata API hands back a public URL, the transport becomes two steps — read the
+metadata, then fetch the bytes from that URL. `ImageTransport` returns `Data` either way, so
+everything from `ImageLibrary` onwards behaves identically.
 
 ```swift
-import CachedRemoteImageAPIClient
+struct MetadataImageTransport: ImageTransport {
+    let baseURL: URL
 
-let transport = URLImageTransport(apiClient: apiClient, imagesPath: "/v1/images")
-let library = try ImageLibrary(transport: transport)
+    func fetch(id: String) async throws -> Data {
+        let (json, _) = try await URLSession.shared.data(from: baseURL.appending(path: "images/\(id)"))
+        let metadata = try JSONDecoder().decode(ImageMetadata.self, from: json)
+        let (bytes, _) = try await URLSession.shared.data(from: metadata.url)
+        return bytes
+    }
+
+    // upload / delete take the same shape: POST / DELETE, then read the id out of the JSON
+
+    private struct ImageMetadata: Decodable {
+        let id: String
+        let url: URL
+    }
+}
 ```
 
-Required endpoints:
-
-| Endpoint | Body | Response |
-|---|---|---|
-| `GET {imagesPath}/{id}` | — | `{ "id": "img_123", "url": "https://..." }` |
-| `POST {imagesPath}` | `multipart/form-data` (field name `file` by default) | same shape |
-| `DELETE {imagesPath}/{id}` | — | — |
-
-Change the field name with `URLImageTransport(… uploadFieldName: "image")`.
-
-The id → URL lookup is cached (LRU) inside the transport. The image bytes are cached by
-`ImageLibrary`, so every transport gets the same caching behavior.
+If resolving the id → URL on every fetch is too expensive, cache it inside your transport. The
+image bytes are cached by `ImageLibrary`, so the transport only has to care about its own
+concern — resolving the URL.
 
 ## Widgets
 
@@ -184,7 +253,7 @@ So the app prefetches, and the widget reads the disk synchronously.
 
 ```swift
 let library = try ImageLibrary(
-    transport: MyImageTransport(api: api),
+    transport: APIImageTransport(api: api),
     configuration: .appGroup("group.com.example.app")
 )
 

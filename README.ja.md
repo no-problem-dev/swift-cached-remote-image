@@ -7,6 +7,7 @@ SwiftUI でリモート画像をキャッシュ付きで表示するパッケー
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-iOS%2017.0+%20%7C%20macOS%2014.0+-blue.svg)
 ![SPM](https://img.shields.io/badge/Swift_Package_Manager-compatible-brightgreen.svg)
+![Dependencies](https://img.shields.io/badge/Dependencies-none-brightgreen.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 📚 **[完全なドキュメント](https://no-problem-dev.github.io/swift-cached-remote-image/documentation/cachedremoteimage/)**
@@ -31,28 +32,31 @@ public protocol ImageTransport: Sendable {
 これを `ImageLibrary` に渡すと、**画像 ID をキーにした** 2 層キャッシュ・再試行・先読み・
 ウィジェット向けの同期読み・`CachedRemoteImage` ビューが付いてくる。
 
-メタデータ API が公開 URL を返す形のバックエンドなら、`URLImageTransport` を同梱しているので
-transport を書く必要はない。
+### このパッケージは依存を持たない
+
+取り方の既定実装は**同梱しない**。書くのはアプリ側で、下の例のとおり 30 行ほどで済む。
+
+同梱しないのは、同梱すると利用者の依存解決を縛るから。4.0 の最初の版では、HTTP クライアントを
+使う既定 transport を別ターゲットに置いていた。ビューだけ使う人には依存が届かない、と考えていた。
+**これは効かない。** SPM の依存解決は**パッケージ単位**で、ターゲット単位ではない。
+使わないターゲットのために宣言した依存も、利用者の解決空間にそのまま入る。
+実際、別世代の HTTP クライアントを既に使っているアプリが、このパッケージを足しただけで
+バージョン解決に失敗した — 使っていないターゲットの依存が原因で。
+
+分けるならパッケージごと分けるしかない。そして `ImageTransport` は 3 メソッドで、アプリが既に
+持っている HTTP スタックの上に書けば数行で終わる。使われない実装を同梱して利用者の依存グラフに
+制約を持ち込む釣り合いではない。
 
 ### 主な機能
 
 - ✅ **非公開ストレージで使える** — 認証付きでバイト列を返す API が例外ではなく既定の想定
+- ✅ **依存ゼロ** — 利用者の解決空間に何も持ち込まないので、アプリ側の HTTP クライアントの世代と衝突しない
 - ✅ **画像 ID をキーにした 2 層キャッシュ** — メモリに復号済み画像、ディスクに受け取ったバイト列
 - ✅ **ウィジェット対応** — App Group への保存と、ネットワークに出ない同期読み
-- ✅ **層を守れるモジュール分割** — ビュー側のモジュールは `APIClient` に依存しない
 - ✅ **失敗が呼び出し側に届く** — `print` や黙った `nil` に落とさない
 - ✅ **リトライポリシー** — 固定回数・指数バックオフ
 - ✅ **プレースホルダーとエラー表示のカスタマイズ** — 完全に差し替え可能
 - ✅ **iOS 17.0+ / macOS 14.0+**
-
-### モジュール
-
-| モジュール | 中身 | 依存 |
-|---|---|---|
-| `CachedRemoteImage` | ビュー・`ImageTransport`・`ImageLibrary`・`ImageDiskCache`・設定 | なし |
-| `CachedRemoteImageAPIClient` | `URLImageTransport`（メタデータ API → URL → URLSession） | `APIClient` |
-
-分けてあるのは、画像を描くだけの Presentation 層が HTTP クライアントを巻き込まないようにするため。
 
 ## 必要要件
 
@@ -68,22 +72,72 @@ dependencies: [
 ]
 ```
 
-使うモジュールを依存に足す:
+ターゲットに足すのは 1 つだけ:
 
 ```swift
 .product(name: "CachedRemoteImage", package: "swift-cached-remote-image"),
-// 同梱の URL ベース transport を使う場合だけ
-.product(name: "CachedRemoteImageAPIClient", package: "swift-cached-remote-image"),
 ```
 
 ## クイックスタート
 
-### 1. transport を実装する
+### 1. transport を書く
+
+想定している既定の形は**非公開ストレージ** — 認証付きで画像バイト列を直接返す API。
+`ImageTransport` に必要なのは 3 メソッドで、キャッシュも再試行もこの中には要らない
+（外側の `ImageLibrary` が持つ）。呼ばれるのは「メモリにもディスクにも無い」と確定した時だけ。
 
 ```swift
 import CachedRemoteImage
+import Foundation
 
-struct MyImageTransport: ImageTransport {
+struct APIImageTransport: ImageTransport {
+    let baseURL: URL
+    let accessToken: @Sendable () async -> String
+
+    func fetch(id: String) async throws -> Data {
+        let request = await authorized("images/\(id)")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Self.checkOK(response)
+        return data
+    }
+
+    func upload(_ imageData: Data, contentType: String) async throws -> String {
+        var request = await authorized("images", method: "POST")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession.shared.upload(for: request, from: imageData)
+        try Self.checkOK(response)
+        return try JSONDecoder().decode(UploadedImage.self, from: data).id
+    }
+
+    func delete(id: String) async throws {
+        let request = await authorized("images/\(id)", method: "DELETE")
+        let (_, response) = try await URLSession.shared.data(for: request)
+        try Self.checkOK(response)
+    }
+
+    private func authorized(_ path: String, method: String = "GET") async -> URLRequest {
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = method
+        request.setValue("Bearer \(await accessToken())", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private struct UploadedImage: Decodable {
+        let id: String
+    }
+
+    private static func checkOK(_ response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+    }
+}
+```
+
+アプリが既に HTTP クライアントを持っているなら、3 メソッドはその上に載せるだけになる:
+
+```swift
+struct APIImageTransport: ImageTransport {
     let api: MyAPIClient
 
     func fetch(id: String) async throws -> Data {
@@ -100,6 +154,11 @@ struct MyImageTransport: ImageTransport {
 }
 ```
 
+投げるエラーの型は自由。表示経路では `ImageLoadError.transportFailed(reason:)` に包み直されるが、
+説明文（`localizedDescription`）は保たれる。型で分岐したい処理 — 認証切れを検知して
+サインインに送る、など — は transport を書いた側で捕まえる。自分が投げたエラーなので、
+そこが一番情報を持っている。
+
 ### 2. ライブラリを作って注入する
 
 ```swift
@@ -108,7 +167,7 @@ struct MyApp: App {
     private let library: ImageLibrary
 
     init() throws {
-        library = try ImageLibrary(transport: MyImageTransport(api: api))
+        library = try ImageLibrary(transport: APIImageTransport(api: api))
     }
 
     var body: some Scene {
@@ -149,27 +208,33 @@ CachedRemoteImage(source: .urlString("https://example.com/a.jpg"))      // 素�
 
 ## URL を返すバックエンド
 
-`GET /images/{id}` が `{ "id": ..., "url": ... }` を返す形なら、同梱の transport を渡す:
+メタデータ API が公開 URL を返す形なら、transport は 2 段階になる — メタデータを引き、
+その URL からバイト列を取る。`ImageTransport` が返すのはどちらの場合も Data なので、
+`ImageLibrary` から先は同じように動く。
 
 ```swift
-import CachedRemoteImageAPIClient
+struct MetadataImageTransport: ImageTransport {
+    let baseURL: URL
 
-let transport = URLImageTransport(apiClient: apiClient, imagesPath: "/v1/images")
-let library = try ImageLibrary(transport: transport)
+    func fetch(id: String) async throws -> Data {
+        let (json, _) = try await URLSession.shared.data(from: baseURL.appending(path: "images/\(id)"))
+        let metadata = try JSONDecoder().decode(ImageMetadata.self, from: json)
+        let (bytes, _) = try await URLSession.shared.data(from: metadata.url)
+        return bytes
+    }
+
+    // upload / delete も同じ形（POST / DELETE して、返ってきた JSON から id を読む）
+
+    private struct ImageMetadata: Decodable {
+        let id: String
+        let url: URL
+    }
+}
 ```
 
-必要なエンドポイント:
-
-| エンドポイント | ボディ | レスポンス |
-|---|---|---|
-| `GET {imagesPath}/{id}` | — | `{ "id": "img_123", "url": "https://..." }` |
-| `POST {imagesPath}` | `multipart/form-data`（フィールド名は既定 `file`） | 同じ形 |
-| `DELETE {imagesPath}/{id}` | — | — |
-
-フィールド名は `URLImageTransport(… uploadFieldName: "image")` で変えられる。
-
-ID → URL の解決は transport 内で LRU キャッシュする。画像バイト列のキャッシュは
-`ImageLibrary` 側にあるので、どんな transport でも同じように効く。
+ID → URL の解決を毎回やるのが惜しければ、transport の中でキャッシュする。
+画像バイト列のキャッシュは `ImageLibrary` 側にあるので、transport が持つのは
+自分の関心事（URL の解決）だけでいい。
 
 ## ウィジェット
 
@@ -182,7 +247,7 @@ ID → URL の解決は transport 内で LRU キャッシュする。画像バ�
 
 ```swift
 let library = try ImageLibrary(
-    transport: MyImageTransport(api: api),
+    transport: APIImageTransport(api: api),
     configuration: .appGroup("group.com.example.app")
 )
 
