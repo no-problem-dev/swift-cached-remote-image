@@ -1,37 +1,56 @@
 import Foundation
 
-/// 画像読み込みエラーの種類
+/// 画像を表示できなかった原因。
 ///
-/// エラーの原因を特定し、適切なエラーハンドリングを可能にする。
+/// 原因は説明文で運ぶ。元のエラー型をそのまま持たせると `Sendable`・`Equatable` を諦めることになり、
+/// 隔離をまたいで運べなくなる。そして原因の型で分岐したい側 — 認証切れを検知して
+/// サインインへ送る、といった処理 — は ``ImageTransport`` を書いた側なので、
+/// 自分が投げたエラーをそこで捕まえられる。表示のこちら側に要るのは、出せる文言と種別だけ。
 public enum ImageLoadError: Error, Equatable, Sendable {
-    /// メタデータの取得に失敗
-    case metadataFetchFailed(String)
+    /// ``ImageLibrary`` が環境に注入されていない。
+    ///
+    /// 3.x はここで `print` して素通りしていたので、画像が出ない理由が
+    /// コンソールにしか出なかった。エラーとして扱えば、エラービューにそのまま出る
+    case libraryNotConfigured
 
-    /// 無効なURL
+    /// URL 文字列を URL にできなかった
     case invalidURL(String)
 
-    /// 画像のダウンロードに失敗
-    case downloadFailed
+    /// 取得に失敗した（``ImageTransport`` またはダウンロードが投げた）
+    case transportFailed(reason: String)
 
-    /// ネットワークエラー
-    case networkError(String)
-
-    /// その他のエラー
-    case unknown(String)
+    /// バイト列は取れたが、画像として復号できなかった。
+    ///
+    /// 同じバイト列を再試行しても結果は変わらないので、再試行の対象にしない
+    case notAnImage(byteCount: Int)
 
     /// ユーザーに表示するエラーメッセージ
     public var localizedMessage: String {
         switch self {
-        case .metadataFetchFailed:
-            return "画像情報の取得に失敗しました"
+        case .libraryNotConfigured:
+            return "画像の読み込み設定がされていません"
         case .invalidURL:
             return "無効な画像URLです"
-        case .downloadFailed:
-            return "画像のダウンロードに失敗しました"
-        case .networkError:
-            return "ネットワークエラーが発生しました"
-        case .unknown:
-            return "画像の読み込みに失敗しました"
+        case .transportFailed:
+            return "画像の取得に失敗しました"
+        case .notAnImage:
+            return "画像を表示できませんでした"
+        }
+    }
+}
+
+extension ImageLoadError: LocalizedError {
+    /// 開発者向けの説明。``localizedMessage`` と違い、原因の詳細を落とさない
+    public var errorDescription: String? {
+        switch self {
+        case .libraryNotConfigured:
+            return "ImageLibrary が未注入（ルートビューで .imageLibrary(_:) を呼ぶ）"
+        case .invalidURL(let string):
+            return "URL として解釈できない文字列: \(string)"
+        case .transportFailed(let reason):
+            return "画像の取得に失敗: \(reason)"
+        case .notAnImage(let byteCount):
+            return "受け取った \(byteCount) バイトが画像として復号できない"
         }
     }
 }

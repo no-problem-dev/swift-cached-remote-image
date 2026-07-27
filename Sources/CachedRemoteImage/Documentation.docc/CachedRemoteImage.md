@@ -4,70 +4,81 @@
 
 ## Overview
 
-`CachedRemoteImage` は iOS 17+ / macOS 14+ 向けの SwiftUI 画像ローディングパッケージ。
-ネットワーク越しの画像をメモリキャッシュとディスクキャッシュの二層で管理し、宣言的な API で画像表示のライフサイクル全体 — プレースホルダー・ローディング・成功・エラー — を処理する。
+**画像の取り方はアプリが与え、キャッシュはパッケージが持つ。**
 
-### 最も簡単な使い方
+認証・エンドポイント・レスポンス形式はアプリごとに違い、パッケージが当てられる場所ではない。
+一方でキャッシュ・再試行・読み込み状態の管理はどこでも同じで、毎回書き直すものではない。
+アプリが実装するのは ``ImageTransport`` の 3 メソッドだけで、残りは ``ImageLibrary`` が引き受ける。
+
+**キャッシュのキーは画像 ID。** 公開 URL を持たない非公開ストレージでも、
+バイト列がそのまま二層キャッシュに乗る。
+
+### 組み立て
+
+```swift
+import CachedRemoteImage
+
+struct MyImageTransport: ImageTransport {
+    let api: MyAPIClient
+    func fetch(id: String) async throws -> Data { try await api.getImage(id: id) }
+    func upload(_ data: Data, contentType: String) async throws -> String {
+        try await api.uploadImage(data, contentType: contentType).id
+    }
+    func delete(id: String) async throws { try await api.deleteImage(id: id) }
+}
+
+let library = try ImageLibrary(transport: MyImageTransport(api: api))
+
+ContentView()
+    .imageLibrary(library)
+```
+
+メタデータ API が公開 URL を返す形のバックエンドなら、`CachedRemoteImageAPIClient` モジュールの
+`URLImageTransport` を渡せば従来どおり動く。
+
+### 表示
 
 ``CachedRemoteImage`` は ``ImageSource`` を受け取り、すべての状態をデフォルトビューで処理する。
 
 ```swift
-import CachedRemoteImage
-
-// URL から直接表示（プレースホルダー・ローディング・エラーはデフォルト）
-CachedRemoteImage(source: .url(imageURL))
-
-// 画像 ID から取得（ImageService を通じてメタデータ → 画像の 2 段階取得）
+// 画像 ID から（ImageTransport 経由）
 CachedRemoteImage(source: .imageId("abc123"))
 
+// URL から直接（認証の要らない外部画像。ImageTransport は通らない）
+CachedRemoteImage(source: .url(imageURL))
+
 // 画像ビューのみカスタマイズ
-CachedRemoteImage(source: .url(imageURL)) { image in
+CachedRemoteImage(source: .imageId("abc123")) { image in
     image.resizable().scaledToFill()
 }
 ```
 
-### ImageService の注入
+### キャッシュと再試行の設定
 
-画像の取得・キャッシュ・アップロードは ``ImageService`` プロトコルで抽象化されている。
-`View.imageService(_:)` モディファイアでルートビューに一度だけ注入する。
-
-```swift
-import CachedRemoteImage
-import APIClient
-
-let apiClient = APIClientImpl(
-    baseURL: URL(string: "https://api.example.com")!
-)
-let imageService = ImageServiceImpl(
-    apiClient: apiClient,
-    imagesPath: "/v1/images",
-    maxResourceCacheSize: 200
-)
-
-ContentView()
-    .imageService(imageService)
-```
-
-### キャッシュとリトライの設定
-
-``CachedRemoteImageConfiguration`` でキャッシュ戦略とリトライ動作を制御する。
-パッケージには `standard`（全キャッシュ）・`noCache`・`withRetry` の 3 つのプリセットが用意されている。
+``ImageLibraryConfiguration`` はライブラリを作るときに一度だけ渡す。
+キャッシュも再試行もライブラリが一つ持つ資源で、ビューごとに切り替えられる性質のものではない。
+ビューを経由しない取得（``ImageLibrary/prefetch(_:)``）にも同じ設定が効く。
 
 ```swift
-// ネットワーク不安定環境向け：指数バックオフでリトライ
-CachedRemoteImage(
-    source: .imageId("abc123"),
-    configuration: .withRetry
-)
-
-// カスタム設定：メタデータのみキャッシュ、最大 3 回リトライ
-CachedRemoteImage(
-    source: .url(imageURL),
-    configuration: CachedRemoteImageConfiguration(
-        cachePolicy: .metadataOnly,
+let library = try ImageLibrary(
+    transport: transport,
+    configuration: ImageLibraryConfiguration(
+        cacheLocation: .appGroup("group.com.example.app"),
+        diskCacheSizeLimit: 200 * 1024 * 1024,
         retryPolicy: .exponentialBackoff(maxRetries: 3)
     )
 )
+```
+
+### ウィジェット
+
+ウィジェット拡張は画像を自分で取れない（非同期取得ができず、認証も持たせるべきではない）。
+アプリが ``ImageLibrary/prefetch(_:)`` で App Group に置き、ウィジェットは
+``ImageDiskCache`` で同期に読む。この型はネットワークに出る手段を持たない。
+
+```swift
+let cache = try ImageDiskCache(location: .appGroup("group.com.example.app"))
+if let data = cache.imageData(for: item.imageId) { /* 同期で読める */ }
 ```
 
 ### 完全なカスタマイズ
@@ -75,10 +86,7 @@ CachedRemoteImage(
 ローディング・エラー・プレースホルダーをすべて差し替える場合はフルイニシャライザを使う。
 
 ```swift
-CachedRemoteImage(
-    source: .url(imageURL),
-    configuration: .withRetry
-) { image in
+CachedRemoteImage(source: .imageId("abc123")) { image in
     image.resizable().scaledToFill()
 } loading: {
     ProgressView("読み込み中...")
@@ -104,20 +112,24 @@ CachedRemoteImage(
 - ``DefaultErrorView``
 - ``DefaultPlaceholderView``
 
-### 画像サービス
+### 画像の出し入れ
 
-- ``ImageService``
-- ``ImageServiceImpl``
+- ``ImageTransport``
+- ``ImageLibrary``
+
+### キャッシュ
+
+- ``ImageDiskCache``
+- ``ImageCacheLocation``
+- ``ImageCacheLocationError``
 
 ### 画像ソース
 
 - ``ImageSource``
-- ``ImageResource``
 
 ### 設定
 
-- ``CachedRemoteImageConfiguration``
-- ``CachePolicy``
+- ``ImageLibraryConfiguration``
 - ``RetryPolicy``
 
 ### ローディング状態

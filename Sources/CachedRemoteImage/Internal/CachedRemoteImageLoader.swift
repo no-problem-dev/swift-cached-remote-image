@@ -1,96 +1,55 @@
 import Foundation
 
-/// 画像読み込みロジックを管理するObservableクラス
+/// 1 枚の画像の読み込み状態を持つ。
 ///
-/// ImageServiceを使用して画像を読み込み、状態を管理します。
+/// 再試行は ``ImageLibrary`` 側にある。ビューを経由しない取得（先読みなど）にも
+/// 同じ方針が効いている必要があるため。ここがやるのは
+/// 「``ImageSource`` を ``ImageLibrary`` の呼び分けに変える」ことと状態の保持だけ。
 @MainActor
 @Observable
-internal final class CachedRemoteImageLoader {
+final class CachedRemoteImageLoader {
     private(set) var state: LoadingState = .idle
 
-    private let imageService: ImageService
+    /// 環境に ``ImageLibrary`` が無ければ `nil`。
+    /// 未注入は失敗として状態に載せる（3.x はここで `print` して素通りしていた）
+    private let library: ImageLibrary?
     private let source: ImageSource
-    private let configuration: CachedRemoteImageConfiguration
 
-    init(
-        imageService: ImageService,
-        source: ImageSource,
-        configuration: CachedRemoteImageConfiguration
-    ) {
-        self.imageService = imageService
+    init(library: ImageLibrary?, source: ImageSource) {
+        self.library = library
         self.source = source
-        self.configuration = configuration
     }
 
     func load() async {
-        // すでに読み込み済みまたは読み込み中の場合はスキップ
         guard case .idle = state else { return }
+
+        guard let library else {
+            state = .failure(.libraryNotConfigured)
+            return
+        }
 
         state = .loading(progress: nil)
 
-        // リトライ戦略に基づいて読み込み
-        let maxAttempts = configuration.retryPolicy.maxRetries + 1
-        var lastError: ImageLoadError?
-
-        for attemptNumber in 0..<maxAttempts {
-            // 2回目以降は待機
-            if attemptNumber > 0 {
-                let delay = await configuration.retryPolicy.delay(for: attemptNumber - 1)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
-
-            // 読み込み実行
-            do {
-                let image = try await loadImage()
-                state = .success(image)
-                return
-            } catch let error as ImageLoadError {
-                lastError = error
-                // 最後の試行でなければ続行
-                if attemptNumber < maxAttempts - 1 {
-                    continue
-                }
-            } catch {
-                lastError = .unknown(error.localizedDescription)
-                if attemptNumber < maxAttempts - 1 {
-                    continue
-                }
-            }
+        do {
+            state = .success(try await image(from: library))
+        } catch let error as ImageLoadError {
+            state = .failure(error)
+        } catch {
+            state = .failure(.transportFailed(reason: error.localizedDescription))
         }
-
-        // すべての試行が失敗
-        state = .failure(lastError ?? .unknown("Unknown error"))
     }
 
-    private func loadImage() async throws -> PlatformImage {
-        // URLが直接指定されている場合
-        if let url = source.resolvedURL {
-            guard let image = await imageService.loadImage(from: url) else {
-                throw ImageLoadError.downloadFailed
+    private func image(from library: ImageLibrary) async throws -> PlatformImage {
+        switch source {
+        case .imageId(let id):
+            return try await library.image(for: id)
+        case .url(let url):
+            return try await library.image(from: url)
+        case .urlString(let string):
+            guard let url = URL(string: string) else {
+                throw ImageLoadError.invalidURL(string)
             }
-            return image
+            return try await library.image(from: url)
         }
-
-        // imageId から取得。URL を返せるバックエンドでは既定実装が
-        // メタデータ経由で URL を引くので、従来の 2 段階と同じ動きになる
-        guard let imageId = source.imageId else {
-            throw ImageLoadError.invalidURL("Invalid image source")
-        }
-
-        let loaded: PlatformImage?
-        do {
-            loaded = try await imageService.loadImage(imageId: imageId)
-        } catch let error as ImageLoadError {
-            // サービス側が原因を特定できているならそのまま伝える
-            throw error
-        } catch {
-            throw ImageLoadError.metadataFetchFailed(error.localizedDescription)
-        }
-
-        guard let image = loaded else {
-            throw ImageLoadError.downloadFailed
-        }
-
-        return image
     }
 }
