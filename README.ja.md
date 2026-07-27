@@ -34,7 +34,8 @@ public protocol ImageTransport: Sendable {
 
 ### このパッケージは依存を持たない
 
-取り方の既定実装は**同梱しない**。書くのはアプリ側で、下の例のとおり 30 行ほどで済む。
+取り方の既定実装は**同梱しない**。書くのはアプリ側で、`URLSession` から素で書いても
+下の例のとおり 40 行ほど、アプリが既に HTTP クライアントを持っているなら 15 行で済む。
 
 同梱しないのは、同梱すると利用者の依存解決を縛るから。4.0 の最初の版では、HTTP クライアントを
 使う既定 transport を別ターゲットに置いていた。ビューだけ使う人には依存が届かない、と考えていた。
@@ -44,7 +45,7 @@ public protocol ImageTransport: Sendable {
 バージョン解決に失敗した — 使っていないターゲットの依存が原因で。
 
 分けるならパッケージごと分けるしかない。そして `ImageTransport` は 3 メソッドで、アプリが既に
-持っている HTTP スタックの上に書けば数行で終わる。使われない実装を同梱して利用者の依存グラフに
+持っている HTTP スタックの上に載せるだけで済む。使われない実装を同梱して利用者の依存グラフに
 制約を持ち込む釣り合いではない。
 
 ### 主な機能
@@ -68,9 +69,12 @@ public protocol ImageTransport: Sendable {
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.0")
+    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.1")
 ]
 ```
+
+**4.0.0 は使えない**（依存解決が通らない・理由は [CHANGELOG.md](CHANGELOG.md)）。
+`Package.resolved` に 4.0.0 が残っている場合は消して解決し直す。
 
 ターゲットに足すのは 1 つだけ:
 
@@ -166,8 +170,12 @@ struct APIImageTransport: ImageTransport {
 struct MyApp: App {
     private let library: ImageLibrary
 
-    init() throws {
-        library = try ImageLibrary(transport: APIImageTransport(api: api))
+    init() {
+        do {
+            library = try ImageLibrary(transport: APIImageTransport(api: api))
+        } catch {
+            fatalError("画像キャッシュを初期化できない: \(error)")
+        }
     }
 
     var body: some Scene {

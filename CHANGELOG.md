@@ -13,6 +13,11 @@
 
 **4.0.0 を使える状態にする修正。** パッケージを依存ゼロにした。
 
+公開済みのタグは差し替えない方針なので、**4.0.0 は使えない版としてそのまま残り、
+この 4.0.1 が直す**。差し替えると、fetch 済みのキャッシュや利用者の `Package.resolved` に
+残った revision と中身が食い違い、「解決できない」「取得したものが違う」という
+原因の分かりにくい壊れ方をする。
+
 ### なぜ 4.0.0 が使えなかったか
 
 4.0.0 は取り方の既定実装（`APIClient` を使う `URLImageTransport`）を
@@ -38,6 +43,12 @@ error: Dependencies could not be resolved because root depends on
 - `CachedRemoteImageAPIClient` ターゲットと `URLImageTransport` を**削除**した。
   **取り方の既定実装は同梱しない** — `ImageTransport` は利用者が自分の HTTP スタックで実装する
 - パッケージの依存は**ゼロ**になった（DocC プラグインはビルド時のみ）
+- ターゲットに足す product は `CachedRemoteImage` の 1 つだけになった
+- テストは 72 → 52。削除したターゲットに属する 20 件（multipart 組み立て・URL 解決の
+  LRU）が一緒に無くなった。残る 52 件はキャッシュ・再試行・transport 差し替えの回帰で、
+  すべて green
+- README / DocC を実態に合わせた。取り方は利用者が書くものになったので、
+  `ImageTransport` の実装例（非公開ストレージ・認証付きでバイト列を返す API）を主役にした
 
 ### なぜ major ではなく patch か
 
@@ -52,8 +63,9 @@ product の削除は厳密には破壊的変更にあたる。しかし **4.0.0 
 
 ## [4.0.0] - 2026-07-27
 
-> ⚠️ **この版は使えない。4.0.1 以降を使うこと。** 依存解決が通らない（理由は 4.0.1 の項）。
-> タグは不変に扱うので打ち直していない — 差し替えると、取得済みの利用者と中身が食い違う。
+> ⚠️ **この版は依存解決が通らない。4.0.1 以降を使うこと。**
+> 下の「破壊的変更 2」のモジュール分割が原因で、この版は取り込めない（理由は 4.0.1 の項）。
+> 以下はこの版が出荷した内容の記録であり、現在の API ではない。
 
 責務の向きを逆にした。3.x はパッケージが「画像の取り方」を決め打ちし、キャッシュを
 その内側に隠していた。4.0 は**アプリが取り方を与え、キャッシュはパッケージが持つ**。
@@ -124,8 +136,8 @@ let library = try ImageLibrary(transport: MyImageTransport(api: api))
 ContentView().imageLibrary(library)
 ```
 
-移行（URL を返す REST API の場合）— メタデータを引いてから URL でバイト列を取る 2 段階を
-transport の中に書く。返すのは `Data` なので、`ImageLibrary` から先は同じように動く:
+移行（URL を返す REST API の場合）— `CachedRemoteImageAPIClient` の
+`URLImageTransport` を渡すと従来と同じ経路で動く:
 
 ```swift
 // Before
@@ -133,57 +145,26 @@ let service = ImageServiceImpl(apiClient: apiClient, imagesPath: "/images", maxR
 ContentView().imageService(service)
 
 // After
-struct MetadataImageTransport: ImageTransport {
-    let api: MyAPI
-    func fetch(id: String) async throws -> Data {
-        let metadata = try await api.getImageMetadata(id: id)   // { "id": ..., "url": ... }
-        return try await api.download(from: metadata.url)
-    }
-    func upload(_ data: Data, contentType: String) async throws -> String {
-        try await api.uploadImage(data, contentType: contentType).id
-    }
-    func delete(id: String) async throws { try await api.deleteImage(id: id) }
-}
-
-let library = try ImageLibrary(transport: MetadataImageTransport(api: api))
+let transport = URLImageTransport(apiClient: apiClient, imagesPath: "/images", maxURLCacheSize: 100)
+let library = try ImageLibrary(transport: transport)
 ContentView().imageLibrary(library)
 ```
 
-#### 2. 取り方の既定実装は同梱しない。パッケージは依存ゼロになった
+#### 2. モジュールを 2 つに分けた
 
 `CachedRemoteImage` が `APIClient` に依存しなくなった。ビューを使うだけの
 Presentation 層が Infrastructure（HTTP クライアント）を巻き込まずに済む。
 
-**この形に至るまでに一度失敗している。** 最初は「既定実装を別ターゲットに置けばよい」と考えて、
-`APIClient` を使う transport を `CachedRemoteImageAPIClient` という別ターゲットに分け、
-その形で 4.0.0 のタグを打った。ビューだけを使う利用者にはその依存が届かない、という想定だった。
+| モジュール | 中身 | 依存 |
+|---|---|---|
+| `CachedRemoteImage` | ビュー・`ImageTransport`・`ImageLibrary`・`ImageDiskCache`・設定 | なし |
+| `CachedRemoteImageAPIClient` | `URLImageTransport`（メタデータ API → URL → URLSession） | `APIClient` |
 
-**効かなかった。SPM の依存解決はパッケージ単位で、ターゲット単位ではない。**
-使わないターゲットのために宣言した依存も、利用者の解決空間にそのまま入る。
-実際、`swift-authentication` 1.x 系（→ `swift-api-client` 1.x）のアプリが 4.0.0 を
-取り込もうとして、ビルドどころか解決の時点で落ちた:
-
-```
-error: Dependencies could not be resolved because root depends on 'swift-authentication' 1.0.0..<2.0.0
-and root depends on 'swift-cached-remote-image' 4.0.0..<5.0.0.
-'swift-cached-remote-image' >= 4.0.0 practically depends on 'swift-api-client' 3.0.0..<4.0.0
-```
-
-このアプリは `CachedRemoteImageAPIClient` を使う予定が無かった。それでも解決は失敗する。
-ターゲット分割は**モジュール間の参照**を切るだけで、**バージョン制約**は切らない。
-
-分けるならパッケージごと分けるしかない。一方で `ImageTransport` は 3 メソッドしかなく、
-アプリが既に持っている HTTP スタックの上に書けば 30 行に満たない。使われない実装を同梱して
-利用者の依存グラフに制約を持ち込む釣り合いではない、と判断して**取り方の実装は利用者に返した**。
-
-- 削除: `CachedRemoteImageAPIClient` ターゲットと、その中にあった `URLImageTransport`
-  （メタデータ API → URL → URLSession の既定実装）
-- このパッケージの依存はビルドツール（`swift-docc-plugin`）だけになった。
-  利用者に伝わる依存はゼロ
-- ターゲットに足す product も 1 つだけになった:
+`URLImageTransport` を使う場合は `CachedRemoteImageAPIClient` も依存に足す:
 
 ```swift
 .product(name: "CachedRemoteImage", package: "swift-cached-remote-image"),
+.product(name: "CachedRemoteImageAPIClient", package: "swift-cached-remote-image"),
 ```
 
 #### 3. 設定はビューごとではなくライブラリ単位になった
@@ -227,18 +208,14 @@ let library = try ImageLibrary(transport: transport, configuration: .appGroup("g
 キャッシュのファイル名も変わった（キーの SHA-256）。**3.x のディスクキャッシュは読めない。**
 初回起動時にキャッシュミスとして取り直されるだけで、消す処理は要らない。
 
-#### 6. アップロードの通信形式はパッケージが決めなくなった
+#### 6. アップロードが multipart になった
 
-1.1.5 でアップロードを `multipart/form-data` から Base64-in-JSON に変えたが、これは
-パッケージが決めるべきことではなかった。33% の膨張と全量のメモリ載せを引き受けるかどうかは、
-サーバーの都合であってビューのキャッシュ層の都合ではない。
+`UploadImageContract` は Base64-in-JSON をやめ、`multipart/form-data` を送る。
+33% の膨張と全量のメモリ載せが無くなる。フィールド名は `URLImageTransport` の
+`uploadFieldName`（既定 `"file"`）で変えられる。
 
-4.0 では `ImageLibrary.add(_:contentType:)` がバイト列と MIME タイプを
-`ImageTransport.upload(_:contentType:)` にそのまま渡す。どう送るか
-（multipart / 生のボディ / Base64 JSON）は transport が決める。
-
-`ImageService` の Base64 JSON（`image_data` / `content_type`）に合わせて作ったサーバーは、
-transport 側を同じ形で書けばそのまま使える。パッケージ側からの制約は無くなった。
+**サーバー側が Base64 JSON（`image_data` / `content_type`）を期待している場合は、
+multipart を受けるように直す必要がある。**
 
 #### 7. 失敗の伝え方
 
@@ -248,6 +225,8 @@ transport 側を同じ形で書けばそのまま使える。パッケージ側�
 - `ImageLibrary` が未注入のとき、3.x は `print` して素通りしていた。
   4.0 は `.failure(.libraryNotConfigured)` になり、エラービューに出る
 - `loadImage(from:)` の `catch { print; return nil }` を廃止。取得の失敗は throw する
+- `ImageResourceDTO` の URL 変換は `fatalError` をやめて throw する。
+  サーバーが壊れた値を返しただけでアプリが落ちることは無くなった
 - 表示経路（`image(for:)` / `image(from:)` / `imageData(for:)`）は `ImageLoadError` に包む。
   書き込み経路（`add` / `remove`）は transport が投げた型をそのまま通す
 
@@ -289,9 +268,8 @@ await service.diskCacheSize()          library.diskCacheSize()
 
 ### テスト
 
-31 → 52。設計変更で意味を失ったテストは消し、新しい経路
-（ID キーのキャッシュ・ディスクの同期読み・transport の差し替え・上限超過の追い出し・
-再試行の打ち切り・URL 直接指定）に回帰を足した。
+31 → 72。設計変更で意味を失ったテストは消し、新しい経路
+（ID キーのキャッシュ・同期読み・transport の差し替え・上限・multipart）に回帰を足した。
 
 ## [3.1.0] - 2026-07-20
 

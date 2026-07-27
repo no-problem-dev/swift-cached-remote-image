@@ -35,8 +35,8 @@ a synchronous disk read for widgets, and the `CachedRemoteImage` view.
 
 ### This package has no dependencies
 
-No default transport is bundled. You write it, and as the example below shows that takes about
-30 lines.
+No default transport is bundled. You write it: about 40 lines straight from `URLSession`, as
+the example below shows, or 15 if your app already has an HTTP client.
 
 It is not bundled because bundling one constrains your dependency resolution. The first cut of
 4.0 put a default transport — one built on an HTTP client — in a separate target, on the
@@ -46,8 +46,8 @@ for a target you never build still enters your resolution space. In practice, an
 a different generation of that HTTP client failed to resolve versions the moment it added this
 package — because of a target it was not using.
 
-Splitting only helps if you split the package itself. And `ImageTransport` is three methods; on
-top of an HTTP stack your app already has, it is a few lines. Shipping an implementation nobody
+Splitting only helps if you split the package itself. And `ImageTransport` is three methods that
+sit straight on top of an HTTP stack your app already has. Shipping an implementation nobody
 uses is not worth constraining every consumer's dependency graph.
 
 ### Features
@@ -71,9 +71,12 @@ uses is not worth constraining every consumer's dependency graph.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.0")
+    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.1")
 ]
 ```
+
+**4.0.0 is unusable** — it does not resolve; see [CHANGELOG.md](CHANGELOG.md) for why. If
+`Package.resolved` still pins 4.0.0, delete it and resolve again.
 
 There is one product to add to your target:
 
@@ -171,8 +174,12 @@ information about it.
 struct MyApp: App {
     private let library: ImageLibrary
 
-    init() throws {
-        library = try ImageLibrary(transport: APIImageTransport(api: api))
+    init() {
+        do {
+            library = try ImageLibrary(transport: APIImageTransport(api: api))
+        } catch {
+            fatalError("Cannot initialize the image cache: \(error)")
+        }
     }
 
     var body: some Scene {
