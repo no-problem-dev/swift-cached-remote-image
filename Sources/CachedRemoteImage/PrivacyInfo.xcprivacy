@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  プライバシーマニフェスト。
+
+  **このパッケージが自分で申告する。** 取り込むアプリ側が肩代わりしても審査は通るが、
+  それは「このパッケージが何の API を呼ぶか」を利用者が知っている前提になる。
+  持たせておけば、利用者はキャッシュの実装を読まなくてよい。
+
+  申告するのは 1 件だけ:
+
+    ファイル日時 — `ImageDiskCache` が容量超過のときに古い順で捨てるために
+    `.contentModificationDateKey` を読む。読むのはアプリ / App Group コンテナの中の
+    キャッシュファイルだけなので、理由は C617.1。
+
+  収集は無い。このパッケージは画像を取りに行く実装すら持たない
+  （`ImageTransport` は protocol で、実装は利用者が渡す）。
+-->
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

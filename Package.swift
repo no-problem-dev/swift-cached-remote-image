@@ -33,7 +33,11 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "CachedRemoteImage"
+            name: "CachedRemoteImage",
+            // プライバシーマニフェスト。`.copy` で中身を変えずにリソースバンドルへ入れる
+            // （`.process` だと plist として最適化されうる）。Xcode がバンドルから拾って
+            // アプリのプライバシーレポートに合算する。
+            resources: [.copy("PrivacyInfo.xcprivacy")]
         ),
         .testTarget(
             name: "CachedRemoteImageTests",
