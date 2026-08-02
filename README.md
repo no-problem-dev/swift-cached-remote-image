@@ -71,7 +71,7 @@ uses is not worth constraining every consumer's dependency graph.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.1")
+    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.2")
 ]
 ```
 
