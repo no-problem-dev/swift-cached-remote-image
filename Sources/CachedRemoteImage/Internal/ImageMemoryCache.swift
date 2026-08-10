@@ -5,14 +5,15 @@ import UIKit
 import AppKit
 #endif
 
-/// 復号済み画像のメモリキャッシュ。
+/// The memory layer of the cache, holding decoded images.
 ///
-/// ディスクにはバイト列、メモリには復号済みの画像を置く。
-/// スクロール中に効くのは復号のスキップで、ファイル読み込みのスキップではないため。
+/// Disk keeps the bytes and this keeps the decoded result, because what a scroll actually costs
+/// is decoding, not reading a file. Entries do not survive the process, and the system may evict
+/// them under memory pressure, so a miss here is normal rather than a failure.
 ///
-/// 画像を出し入れする口だけ `@MainActor` にしてある。`PlatformImage` は
-/// macOS では非 Sendable で、隔離をまたいで渡せない。NSCache 自体はスレッドセーフなので、
-/// 何も手渡さない削除系は隔離を要求しない。
+/// Only the calls that hand an image in or out are isolated to the main actor: `PlatformImage` is
+/// not `Sendable` on macOS and cannot cross isolation. `NSCache` is thread-safe by itself, so the
+/// removal calls, which pass no image, need no isolation.
 final class ImageMemoryCache: @unchecked Sendable {
     private let cache = NSCache<NSString, PlatformImage>()
 
@@ -39,8 +40,10 @@ final class ImageMemoryCache: @unchecked Sendable {
         cache.removeAllObjects()
     }
 
-    /// 復号後にメモリを占める実バイト数。圧縮後のファイルサイズとは桁が違うので、
-    /// 上限を意味のあるものにするには復号後で測る必要がある
+    /// The bytes an image occupies once decoded.
+    ///
+    /// Several times the compressed file size, so a cost limit only means anything if it is
+    /// measured after decoding rather than from the data that arrived.
     private func memoryCost(of image: PlatformImage) -> Int {
         #if canImport(UIKit)
         guard let cgImage = image.cgImage else { return 0 }

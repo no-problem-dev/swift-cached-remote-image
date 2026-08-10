@@ -1,11 +1,17 @@
 #if canImport(UIKit)
 import UIKit
 
-/// iOS/macOS 両対応のプラットフォーム画像型。iOS では `UIImage`、macOS では `NSImage` が割り当てられる。
+/// The platform's image type: `UIImage` on iOS, `NSImage` on macOS.
+///
+/// It is not `Sendable` on macOS, which is why the calls that hand images in and out of the
+/// memory cache are isolated to the main actor.
 public typealias PlatformImage = UIImage
 #elseif canImport(AppKit)
 import AppKit
 
-/// iOS/macOS 両対応のプラットフォーム画像型。iOS では `UIImage`、macOS では `NSImage` が割り当てられる。
+/// The platform's image type: `UIImage` on iOS, `NSImage` on macOS.
+///
+/// It is not `Sendable` on macOS, which is why the calls that hand images in and out of the
+/// memory cache are isolated to the main actor.
 public typealias PlatformImage = NSImage
 #endif

@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// デフォルトのローディングビュー
+/// The view shown while an image loads, when you do not supply one.
 ///
-/// シンプルなプログレスインジケーターを表示する。
+/// A progress indicator filling whatever space it is given, so a list row keeps its height while
+/// the fetch is in flight.
 public struct DefaultLoadingView: View {
     public init() {}
 
@@ -12,13 +13,14 @@ public struct DefaultLoadingView: View {
     }
 }
 
-/// デフォルトのエラービュー
+/// The view shown when an image fails to load, when you do not supply one.
 ///
-/// エラーメッセージとリトライボタンを表示する。`onRetry` を渡すと再試行ボタンが現れる。
+/// A warning symbol above the error's user-facing message. ``CachedRemoteImage`` builds it
+/// without a retry action, so the button appears only when you construct one yourself.
 public struct DefaultErrorView: View {
-    /// 表示するエラー
     public let error: ImageLoadError
-    /// 再試行時に呼ばれるクロージャ。`nil` の場合は再試行ボタンを非表示にする。
+
+    /// Called when the user taps retry. The button is hidden entirely when this is `nil`.
     public let onRetry: (() -> Void)?
 
     public init(error: ImageLoadError, onRetry: (() -> Void)? = nil) {
@@ -50,9 +52,9 @@ public struct DefaultErrorView: View {
     }
 }
 
-/// デフォルトのプレースホルダービュー
+/// The view shown before an image starts loading, when you do not supply one.
 ///
-/// 読み込み開始前に表示するシンプルなビュー。半透明グレーで領域を確保する。
+/// A translucent grey block, so the layout does not shift once the image arrives.
 public struct DefaultPlaceholderView: View {
     public init() {}
 

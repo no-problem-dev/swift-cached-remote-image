@@ -1,16 +1,16 @@
 import CryptoKit
 import Foundation
 
-/// キャッシュのキー。
+/// A cache key that keeps image ids and URLs in separate name spaces.
 ///
-/// 画像 ID と URL は同じディレクトリ・同じ NSCache に同居するので、
-/// 名前空間を分けておかないと「`https://…` という ID」のような値が衝突しうる。
-/// 衝突すると別の画像が出るという最悪の壊れ方をするので、型で分ける。
+/// Both kinds share one directory and one `NSCache`, so without a prefix an id that happens to
+/// read like a URL could land on an entry stored for a real one. A collision here serves the
+/// wrong image, which is the worst way a cache can break, so the two are separated by type.
 enum ImageCacheKey: Hashable, Sendable {
     case id(String)
     case url(String)
 
-    /// 名前空間つきの文字列表現
+    /// The key as a string, prefixed with which of the two kinds it is.
     private var namespaced: String {
         switch self {
         case .id(let id): return "id:\(id)"
@@ -18,16 +18,16 @@ enum ImageCacheKey: Hashable, Sendable {
         }
     }
 
-    /// メモリキャッシュ（NSCache）のキー
+    /// The name-spaced key as an `NSString`, which is the key type `NSCache` requires.
     var memoryKey: NSString {
         namespaced as NSString
     }
 
-    /// ディスク上のファイル名。
+    /// The file name on disk: a SHA-256 digest of the name-spaced key.
     ///
-    /// ID や URL をそのままファイル名にすると、長さ上限（255 バイト）と
-    /// パス区切り文字の両方に引っかかる。中身ではなくキーのハッシュを名前にすることで、
-    /// キーの形に関係なく固定長で安全な名前になる。
+    /// Ids and URLs cannot be file names as they stand — they run into both the 255-byte length
+    /// limit and the path separator. Hashing the key rather than the bytes it points at gives a
+    /// fixed-length, safe name whatever shape the key has.
     var fileName: String {
         let digest = SHA256.hash(data: Data(namespaced.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()

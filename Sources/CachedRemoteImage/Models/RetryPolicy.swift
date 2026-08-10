@@ -1,51 +1,51 @@
 import Foundation
 
-/// リトライ戦略を制御する列挙型
+/// How many times a failed fetch is retried, and how long it waits in between.
 ///
-/// ネットワークエラーなどの一時的な失敗時の再試行動作を制御する。
-/// ``ImageLibraryConfiguration`` の `retryPolicy` プロパティに渡して使う。
+/// Only fetches are retried. Bytes that arrive but cannot be decoded
+/// (``ImageLoadError/notAnImage(byteCount:)``) are not, since decoding the same bytes again gives
+/// the same answer. Pass a policy to ``ImageLibraryConfiguration`` and it governs every fetch the
+/// library makes, including the ones that never go through a view.
 ///
-/// 再試行されるのは**取得の失敗**だけで、取れたバイト列が画像として復号できなかった場合
-/// （``ImageLoadError/notAnImage(byteCount:)``）は再試行しない。
-/// 同じバイト列を何度復号しても結果は変わらないため。
-///
-/// ## 使用例
+/// ## Examples
 /// ```swift
-/// // リトライしない（デフォルト）
+/// // No retries (the default)
 /// let library = try ImageLibrary(transport: transport)
 ///
-/// // 3回まで固定間隔でリトライ
+/// // Three retries, with no waiting in between
 /// let library = try ImageLibrary(
 ///     transport: transport,
 ///     configuration: ImageLibraryConfiguration(retryPolicy: .fixed(count: 3))
 /// )
 ///
-/// // 指数バックオフでリトライ（推奨：ネットワーク負荷を軽減）
+/// // Exponential backoff, which is what an unreliable network wants
 /// let library = try ImageLibrary(transport: transport, configuration: .withRetry)
 /// ```
 public enum RetryPolicy: Equatable, Sendable {
-    /// リトライしない
+    /// Give up on the first failure.
     case none
 
-    /// 固定回数リトライ（即座に再試行）
+    /// Retry immediately, with no wait between attempts.
     ///
-    /// - Parameter count: リトライ回数（1以上）
+    /// Suits a transport whose failures clear on their own. For network errors prefer
+    /// ``exponentialBackoff(maxRetries:baseDelay:)``: retrying instantly only adds load to a
+    /// server that may already be struggling.
+    ///
+    /// - Parameter count: How many times to retry after the first failure.
     case fixed(count: Int)
 
-    /// 指数バックオフでリトライ（推奨）
+    /// Retry with a wait that doubles after every attempt.
     ///
-    /// 失敗するたびに待機時間を指数関数的に増加させることで、
-    /// サーバーへの負荷を軽減し、一時的な問題からの回復を促進する。
+    /// The wait before retry *n* is `baseDelay * 2^n`, so a one-second base waits one, two and
+    /// then four seconds. The task is suspended for that time, and cancelling it ends the
+    /// retrying.
     ///
     /// - Parameters:
-    ///   - maxRetries: 最大リトライ回数（1以上）
-    ///   - baseDelay: 基本待機時間（秒、デフォルト: 1.0）
-    ///
-    /// 実際の待機時間は `baseDelay * 2^(attemptNumber)` で計算される。
-    /// 例: baseDelay=1.0 の場合、1秒、2秒、4秒、8秒...
+    ///   - maxRetries: How many times to retry after the first failure.
+    ///   - baseDelay: Seconds to wait before the first retry.
     case exponentialBackoff(maxRetries: Int, baseDelay: TimeInterval = 1.0)
 
-    /// 最大リトライ回数
+    /// How many retries this policy allows after the first failure. Negative counts read as zero.
     internal var maxRetries: Int {
         switch self {
         case .none:
@@ -57,10 +57,10 @@ public enum RetryPolicy: Equatable, Sendable {
         }
     }
 
-    /// 指定された試行回数に対する待機時間を計算
+    /// The seconds to wait before a given retry attempt.
     ///
-    /// - Parameter attemptNumber: 試行回数（0から始まる）
-    /// - Returns: 待機時間（秒）
+    /// - Parameter attemptNumber: The zero-based index of the retry about to be made.
+    /// - Returns: The delay in seconds, or zero for the policies that do not wait.
     internal func delay(for attemptNumber: Int) -> TimeInterval {
         switch self {
         case .none:

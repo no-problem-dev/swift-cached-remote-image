@@ -1,36 +1,37 @@
 import Foundation
 
-/// ディスクキャッシュを置く場所。
+/// Where the disk cache lives on the file system.
 ///
-/// アプリ本体とウィジェット拡張は**同じ値**からディレクトリを解決する。
-/// 両者がパスを別々に組み立てると、綴りが 1 文字ずれただけでウィジェットが
-/// 永久に無表示になる（アプリ側は正常に見えるので気づきにくい）。
-/// 場所を値として渡せる形にしてあるのは、その食い違いを起こしようがなくするため。
+/// The app and its widget extension resolve their directory from the same value. When each side
+/// builds a path of its own instead, a one-character difference leaves the widget permanently
+/// blank while the app still looks correct. Passing the location around as a value removes that
+/// failure entirely.
 public enum ImageCacheLocation: Sendable, Equatable {
-    /// ユーザーの Caches ディレクトリ配下（既定）。
+    /// The user's Caches directory (the default).
     ///
-    /// OS が容量不足時に消せる場所。アプリ単体で使うぶんには妥当だが、
-    /// ウィジェットからは読めないので、ウィジェットを持つなら ``appGroup(_:subdirectory:)`` を使う。
+    /// The system may evict these files when storage runs low, which is fine for an app on its
+    /// own. A widget extension cannot read them, so use ``appGroup(_:subdirectory:)`` if you
+    /// ship one.
     case caches
 
-    /// App Group コンテナ配下。
+    /// A directory inside an App Group container.
     ///
-    /// ウィジェット拡張が読める唯一の場所。OS は勝手に消さないので、
-    /// 上限は ``ImageLibraryConfiguration/diskCacheSizeLimit`` で自分で決める必要がある。
+    /// The only place a widget extension can read. The system never reclaims it, so the ceiling
+    /// has to be yours: set it through ``ImageLibraryConfiguration/diskCacheSizeLimit``.
     ///
     /// - Parameters:
-    ///   - identifier: App Group 識別子（`group.com.example.app` など）
-    ///   - subdirectory: コンテナ内のサブディレクトリ名
+    ///   - identifier: The App Group identifier, such as `group.com.example.app`.
+    ///   - subdirectory: The directory name to use inside the container.
     case appGroup(_ identifier: String, subdirectory: String = "CachedRemoteImage")
 
-    /// 明示したディレクトリ。テストや、独自のファイル配置規約を持つアプリ向け。
+    /// An explicit directory, for tests and for apps with their own file layout conventions.
     case directory(URL)
 
-    /// 実際のディレクトリを解決し、無ければ作る。
+    /// Resolves the directory, creating it if it does not exist yet.
     ///
-    /// - Throws: App Group コンテナを解決できないとき ``ImageCacheLocationError/appGroupUnavailable(identifier:)``。
-    ///   entitlement の付け忘れがここに出る。黙って別の場所に落とすと、
-    ///   ウィジェットが何も出せない理由が最後まで分からなくなる
+    /// - Throws: ``ImageCacheLocationError`` when the container cannot be resolved. A missing App
+    ///   Group entitlement surfaces here; quietly falling back to another directory would leave
+    ///   the widget blank with no way to find out why.
     func resolvedDirectory() throws -> URL {
         let directory: URL
         switch self {
@@ -56,11 +57,17 @@ public enum ImageCacheLocation: Sendable, Equatable {
     }
 }
 
-/// ディスクキャッシュの置き場所を解決できなかった原因。
+/// Why the disk cache directory could not be resolved.
 public enum ImageCacheLocationError: Error, Equatable, Sendable {
-    /// App Group コンテナが取れなかった。entitlement か識別子の綴りを疑う
+    /// The App Group container could not be resolved.
+    ///
+    /// Almost always a missing entitlement or a misspelled identifier rather than a runtime
+    /// condition, so it is worth failing loudly at startup instead of recovering from.
     case appGroupUnavailable(identifier: String)
-    /// Caches ディレクトリが取れなかった
+
+    /// The system reported no Caches directory.
+    ///
+    /// Effectively unreachable from an app process; treat it as a broken environment.
     case cachesUnavailable
 }
 

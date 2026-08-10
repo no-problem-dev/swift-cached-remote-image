@@ -1,23 +1,19 @@
 import Foundation
 
-/// 画像バイト列の出し入れ。
+/// How your app fetches, uploads and deletes image bytes.
 ///
-/// 認証・エンドポイント・レスポンス形式はアプリごとに違い、パッケージが当てられる場所ではない。
-/// 3.x まではパッケージが「メタデータ API で URL を引いて URLSession で取る」という取り方を
-/// 決め打ちしていたが、実際の利用者は非公開ストレージ（認証付きでバイト列を直接返す API）で、
-/// 公開 URL が存在しなかった。決め打ちの取り方から外れた利用者は、キャッシュも含めて
-/// 全部を自分で書き直すことになっていた。
+/// Authentication, endpoints and response shapes differ per app, and a package has no business
+/// guessing them. Caching, retries and the SwiftUI loading lifecycle are the same everywhere. So
+/// the direction is inverted: your app supplies the fetching, and ``ImageLibrary`` owns the
+/// caching around it. These three methods are all you implement.
 ///
-/// そこで責務の向きを逆にした — **取り方はアプリが与え、キャッシュはパッケージが持つ**。
-/// アプリが実装するのはこの 3 メソッドだけで、2 層キャッシュ・リトライ・SwiftUI ビューは
-/// ``ImageLibrary`` が引き受ける。
+/// No default implementation ships with the package. Bundling one would constrain the dependency
+/// resolution of everyone who never uses it, because SPM resolves dependencies per package rather
+/// than per target: a dependency declared for a target you never build still enters your
+/// resolution space. If your backend returns a public URL from a metadata endpoint, make
+/// ``fetch(id:)`` two steps — read the metadata, then fetch the bytes from that URL.
 ///
-/// 既定実装は同梱していない。同梱すると、それを使わない利用者の依存解決まで縛るため
-/// （SPM の依存解決はパッケージ単位で、使わないターゲットのために宣言した依存も
-/// 利用者の解決空間に入る）。メタデータ API が公開 URL を返す形のバックエンドなら、
-/// ``fetch(id:)`` の中を「メタデータを引く → その URL からバイト列を取る」の 2 段階にする。
-///
-/// ## 実装例
+/// ## Implementing it
 /// ```swift
 /// struct MyImageTransport: ImageTransport {
 ///     let api: MyAPIClient
@@ -36,27 +32,31 @@ import Foundation
 /// }
 /// ```
 public protocol ImageTransport: Sendable {
-    /// 画像 ID からバイト列を取得する。
+    /// Fetches the bytes for an image id.
     ///
-    /// キャッシュはこの外側（``ImageLibrary``）にあるので、実装はキャッシュを持たなくてよい。
-    /// 呼ばれた時点でメモリにもディスクにも無いことが確定している。
+    /// Implementations need no cache of their own. This is called only once ``ImageLibrary`` has
+    /// established that the bytes are in neither memory nor disk, and the retry policy is applied
+    /// around it, so a single display can call it more than once.
     ///
-    /// - Parameter id: 画像 ID
-    /// - Returns: 画像のバイト列（エンコード形式は問わない）
-    /// - Throws: 取得できなかった原因。``ImageLibrary`` は表示のために
-    ///   ``ImageLoadError/transportFailed(reason:)`` に包み直すが、原因の説明文は保たれる
+    /// - Parameter id: The image id to fetch.
+    /// - Returns: The image bytes, in whatever format the backend stores.
+    /// - Throws: Any error. On the display path ``ImageLibrary`` rewraps it as
+    ///   ``ImageLoadError/transportFailed(reason:)``, keeping the description.
     func fetch(id: String) async throws -> Data
 
-    /// バイト列をアップロードして画像 ID を得る。
+    /// Uploads bytes and returns the id the backend assigned to them.
     ///
     /// - Parameters:
-    ///   - data: 画像のバイト列
-    ///   - contentType: MIME タイプ（`image/jpeg` など）
-    /// - Returns: 採番された画像 ID。以降 ``fetch(id:)`` で引ける値
+    ///   - data: The image bytes to upload.
+    ///   - contentType: The MIME type of those bytes, such as `image/jpeg`.
+    /// - Returns: The new image id, which ``fetch(id:)`` can resolve from then on.
     func upload(_ data: Data, contentType: String) async throws -> String
 
-    /// 画像を削除する。
+    /// Deletes an image from the backend.
     ///
-    /// - Parameter id: 画像 ID
+    /// Only the backend: the cached copies on this device are dropped separately, by
+    /// ``ImageLibrary/remove(id:)``.
+    ///
+    /// - Parameter id: The image id to delete.
     func delete(id: String) async throws
 }

@@ -1,30 +1,34 @@
 import Foundation
 
-/// 画像を表示できなかった原因。
+/// Why an image could not be displayed.
 ///
-/// 原因は説明文で運ぶ。元のエラー型をそのまま持たせると `Sendable`・`Equatable` を諦めることになり、
-/// 隔離をまたいで運べなくなる。そして原因の型で分岐したい側 — 認証切れを検知して
-/// サインインへ送る、といった処理 — は ``ImageTransport`` を書いた側なので、
-/// 自分が投げたエラーをそこで捕まえられる。表示のこちら側に要るのは、出せる文言と種別だけ。
+/// The cause travels as text. Keeping the original error would cost `Sendable` and `Equatable`,
+/// and stop the value crossing isolation boundaries — and the code that wants to branch on the
+/// concrete type, to refresh a token or sign the user out, is the code that wrote the transport
+/// and threw it. What the display side needs is something to show and a case to match on.
 public enum ImageLoadError: Error, Equatable, Sendable {
-    /// ``ImageLibrary`` が環境に注入されていない。
+    /// No library was found in the environment, so nothing could be fetched.
     ///
-    /// 3.x はここで `print` して素通りしていたので、画像が出ない理由が
-    /// コンソールにしか出なかった。エラーとして扱えば、エラービューにそのまま出る
+    /// Delivered to the error view like any other failure, instead of leaving an image that
+    /// silently never appears.
     case libraryNotConfigured
 
-    /// URL 文字列を URL にできなかった
+    /// A string source could not be parsed as a URL. The string travels along so it can be shown.
     case invalidURL(String)
 
-    /// 取得に失敗した（``ImageTransport`` またはダウンロードが投げた）
+    /// The fetch failed, and the reason is whatever the transport or the download said it was.
     case transportFailed(reason: String)
 
-    /// バイト列は取れたが、画像として復号できなかった。
+    /// Bytes arrived but could not be decoded as an image.
     ///
-    /// 同じバイト列を再試行しても結果は変わらないので、再試行の対象にしない
+    /// Never retried, since decoding the same bytes again gives the same answer, and the entry is
+    /// dropped from the disk cache so it cannot keep answering later requests with this failure.
     case notAnImage(byteCount: Int)
 
-    /// ユーザーに表示するエラーメッセージ
+    /// A short message that is safe to put in front of a user.
+    ///
+    /// Deliberately vague about the cause, and written in Japanese with no localization table
+    /// behind it. Use `errorDescription` when you want the detail.
     public var localizedMessage: String {
         switch self {
         case .libraryNotConfigured:
@@ -40,7 +44,7 @@ public enum ImageLoadError: Error, Equatable, Sendable {
 }
 
 extension ImageLoadError: LocalizedError {
-    /// 開発者向けの説明。``localizedMessage`` と違い、原因の詳細を落とさない
+    /// A developer-facing description that keeps the detail the user-facing message drops.
     public var errorDescription: String? {
         switch self {
         case .libraryNotConfigured:
@@ -55,36 +59,36 @@ extension ImageLoadError: LocalizedError {
     }
 }
 
-/// 画像の読み込み状態を表す列挙型
+/// The stage a single image load has reached, as the view sees it.
 ///
-/// UI の状態管理を明確にし、適切な表示を可能にする。
-///
-/// ## 状態遷移
+/// A load moves through the sequence once and never goes back:
 /// ```
 /// idle → loading → success or failure
 /// ```
 ///
-/// - Note: MainActorで使用されることを想定しているため、Sendableに準拠していません。
+/// - Note: Not `Sendable`. It carries a decoded ``PlatformImage``, which is not sendable on
+///   macOS, so this is meant to be read on the main actor.
 public enum LoadingState {
-    /// 読み込み開始前（初期状態）
+    /// Nothing has been requested yet, and the placeholder is showing.
     case idle
 
-    /// 読み込み中
+    /// A fetch is in flight, including any retries.
     ///
-    /// - Parameter progress: 進捗状況（0.0〜1.0、nilの場合は不定）
+    /// - Parameter progress: How much has arrived, from 0 to 1, or `nil` when the total length is
+    ///   not known.
     case loading(progress: Double?)
 
-    /// 読み込み成功
+    /// The image is decoded and ready to display.
     ///
-    /// - Parameter image: 読み込まれた画像
+    /// - Parameter image: The decoded image.
     case success(PlatformImage)
 
-    /// 読み込み失敗
+    /// The load ended in failure and the error view is showing.
     ///
-    /// - Parameter error: エラーの詳細
+    /// - Parameter error: What went wrong.
     case failure(ImageLoadError)
 
-    /// 読み込みが完了しているかどうか
+    /// Whether the load has settled, whether it succeeded or failed.
     public var isCompleted: Bool {
         switch self {
         case .success, .failure:
@@ -94,7 +98,6 @@ public enum LoadingState {
         }
     }
 
-    /// 読み込みに成功したかどうか
     public var isSuccess: Bool {
         if case .success = self {
             return true
@@ -102,7 +105,6 @@ public enum LoadingState {
         return false
     }
 
-    /// 読み込みに失敗したかどうか
     public var isFailure: Bool {
         if case .failure = self {
             return true
@@ -110,7 +112,6 @@ public enum LoadingState {
         return false
     }
 
-    /// 成功時の画像を取得
     public var image: PlatformImage? {
         if case .success(let image) = self {
             return image
@@ -118,7 +119,6 @@ public enum LoadingState {
         return nil
     }
 
-    /// 失敗時のエラーを取得
     public var error: ImageLoadError? {
         if case .failure(let error) = self {
             return error
@@ -137,7 +137,7 @@ extension LoadingState: Equatable {
         case (.loading(let lhsProgress), .loading(let rhsProgress)):
             return lhsProgress == rhsProgress
         case (.success, .success):
-            // 画像の同一性は参照ではなく状態のみで判定
+            // Two successes compare equal by state alone, not by which image each one holds.
             return true
         case (.failure(let lhsError), .failure(let rhsError)):
             return lhsError == rhsError

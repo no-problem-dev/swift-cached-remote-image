@@ -1,27 +1,27 @@
 import Foundation
 
-/// 画像の置き場。``ImageTransport`` を包んで、2 層キャッシュ・再試行・
-/// ``CachedRemoteImage`` ビューへの供給を引き受ける。
+/// Owns an app's cached images: two cache layers, the retry policy, and the fetches behind the view.
 ///
-/// アプリが用意するのは取り方（``ImageTransport``）だけで、
-/// 「いつ取りに行くか」「どこに置くか」「いつ捨てるか」はこの型が決める。
+/// Your app supplies only the way bytes are fetched, as an ``ImageTransport``. When to go to the
+/// network, where a result is kept and when it is discarded are decided here.
 ///
-/// ## 2 層の役割
-/// - メモリ: 復号済みの画像。スクロール中に効くのは復号のスキップ
-/// - ディスク: 受け取ったバイト列そのもの。アプリを再起動しても残り、
-///   ``ImageDiskCache`` を通してウィジェットからも同期で読める
+/// ## The two layers
+/// - Memory holds decoded images. What it saves during a scroll is decoding, not file reads. It
+///   is emptied when the process ends, and the system may evict entries under memory pressure.
+/// - Disk holds the bytes as they arrived. They survive a relaunch, and a widget can read them
+///   synchronously through ``ImageDiskCache``.
 ///
-/// **キーは画像 ID。** 3.x のキャッシュは URL 文字列がキーだったので、
-/// 公開 URL を持たないバックエンドではキャッシュに一切乗らなかった。
+/// **Everything is keyed by image id**, so a backend that never exposes a public URL still gets
+/// the full benefit of both layers.
 ///
-/// ## 組み立て
+/// ## Building one
 /// ```swift
 /// let library = try ImageLibrary(
 ///     transport: MyImageTransport(api: api),
 ///     configuration: .appGroup("group.com.example.app")
 /// )
 ///
-/// // SwiftUI に渡す
+/// // Hand it to SwiftUI
 /// ContentView().imageLibrary(library)
 /// ```
 public final class ImageLibrary: Sendable {
@@ -32,11 +32,12 @@ public final class ImageLibrary: Sendable {
     private let urlSession: URLSession
 
     /// - Parameters:
-    ///   - transport: 画像バイト列の出し入れ。アプリが実装する
-    ///   - configuration: キャッシュと再試行の設定
-    /// - Throws: ディスクキャッシュの置き場所を解決できないとき（``ImageCacheLocationError``）。
-    ///   App Group の entitlement 忘れをここで落とす。黙って別の場所に置くと、
-    ///   ウィジェットが何も表示できない理由が最後まで分からなくなる
+    ///   - transport: How image bytes are fetched, uploaded and deleted. Your app implements it.
+    ///   - configuration: Cache placement, size limits and retry policy, fixed for the lifetime
+    ///     of this library.
+    /// - Throws: ``ImageCacheLocationError`` when the disk cache directory cannot be resolved. A
+    ///   missing App Group entitlement lands here. Falling back to some other directory instead
+    ///   would leave the widget permanently blank with no way to find out why.
     public init(
         transport: any ImageTransport,
         configuration: ImageLibraryConfiguration = .standard
@@ -54,16 +55,17 @@ public final class ImageLibrary: Sendable {
         self.urlSession = configuration.urlSession
     }
 
-    // MARK: - 表示のための取得
+    // MARK: - Fetching for display
 
-    /// 画像 ID から表示できる画像を得る。
+    /// Returns a displayable image for an image id, going to the network only as a last resort.
     ///
-    /// メモリ → ディスク → ``ImageTransport/fetch(id:)`` の順に見る。
+    /// Looks in memory, then on disk, then calls ``ImageTransport/fetch(id:)``. A fetched image
+    /// lands in both layers, so the next call for the same id is a memory hit.
     ///
-    /// - Throws: ``ImageLoadError``。取得の失敗は原因の説明つきで
-    ///   ``ImageLoadError/transportFailed(reason:)`` に包まれる。
-    ///   transport が投げた型そのものを取り出す必要があるなら、その分岐は transport を書いた側で行う
-    ///   （投げたのはアプリ自身なので、そこが一番情報を持っている）
+    /// - Throws: ``ImageLoadError``. A failing transport arrives as
+    ///   ``ImageLoadError/transportFailed(reason:)`` with its description preserved. Code that
+    ///   needs the concrete error type back — to catch an expired session and send the user to
+    ///   sign-in — belongs in the transport, which threw it and holds the most information.
     @MainActor
     public func image(for id: String) async throws -> PlatformImage {
         let key = ImageCacheKey.id(id)
@@ -74,11 +76,12 @@ public final class ImageLibrary: Sendable {
         return try decode(data, for: key)
     }
 
-    /// URL から表示できる画像を得る。
+    /// Returns a displayable image for a URL, without involving the transport.
     ///
-    /// 認証の要らない外部画像（検索結果のサムネイルなど）向け。
-    /// ``ImageTransport`` は通らない — URL は宛先を自分で名乗っているので、
-    /// アプリ固有の取り方を挟む余地がない。
+    /// For images that need no authentication, such as search-result thumbnails: a URL already
+    /// names its own destination, so there is no app-specific fetching to inject. Downloads use
+    /// the session from the configuration, and results are cached under the URL in a key space of
+    /// their own, apart from image ids.
     ///
     /// - Throws: ``ImageLoadError``
     @MainActor
@@ -91,12 +94,13 @@ public final class ImageLibrary: Sendable {
         return try decode(data, for: key)
     }
 
-    // MARK: - バイト列としての取得
+    // MARK: - Fetching raw bytes
 
-    /// 画像 ID からバイト列を得る。復号もメモリキャッシュもしない。
+    /// Returns the bytes for an image id, skipping both the decode step and the memory cache.
     ///
-    /// 表示せずに端末へ置いておきたい場合（``prefetch(_:)``）や、
-    /// 画像として使わずに扱いたい場合に使う。
+    /// Checks disk, then the transport, and writes what it fetched back to disk. Use it to put an
+    /// image on the device without showing it, as ``prefetch(_:)`` does, or to treat the bytes as
+    /// something other than an image.
     ///
     /// - Throws: ``ImageLoadError/transportFailed(reason:)``
     public func imageData(for id: String) async throws -> Data {
@@ -115,27 +119,27 @@ public final class ImageLibrary: Sendable {
         return data
     }
 
-    /// 端末にあるバイト列を**同期で**返す。無ければ `nil`。
+    /// Returns bytes already on this device synchronously, or `nil` when they are not there.
     ///
-    /// ネットワークには行かない。WidgetKit のタイムライン生成のように
-    /// 非同期の取得ができない場所のための入口。
+    /// Never touches the network. This is the entry point for places that cannot await a fetch,
+    /// such as WidgetKit timeline generation.
     ///
-    /// ウィジェット拡張から使う場合は、この型ではなく ``ImageDiskCache`` を直接作る
-    /// （拡張側に ``ImageTransport``＝認証を持ち込まずに済む）。
+    /// From a widget extension, build ``ImageDiskCache`` directly rather than this type: that
+    /// keeps the transport, and therefore your credentials, out of the extension.
     public func cachedImageData(for id: String) -> Data? {
         diskCache.imageData(for: id)
     }
 
-    /// 表示予定の画像を先に端末へ落としておく。
+    /// Downloads images to disk ahead of time, skipping ids already cached.
     ///
-    /// ウィジェットは自分で画像を取りに行けない（認証を持たせるべきではない）ので、
-    /// アプリ側が同期後に「次にウィジェットへ出る画像」をここで置いておく。
+    /// A widget cannot fetch its own images, so after a sync the app puts whatever the widget
+    /// will show next on disk. Nothing is decoded here: what a widget needs is bytes, and the
+    /// decoding happens on its side.
     ///
-    /// 復号はしない。ウィジェットが要るのはバイト列で、復号はウィジェット側で起きるため。
-    ///
-    /// - Parameter ids: 先読みする画像 ID
-    /// - Returns: 取れなかった画像 ID。先読みの失敗は表示時に取り直せるので進行は止めないが、
-    ///   何が落ちたかは呼び出し側に返す（黙って減らさない）
+    /// - Parameter ids: The image ids to download.
+    /// - Returns: The ids that could not be downloaded. A failed prefetch is recoverable at
+    ///   display time, so it does not stop the rest, but the caller is still told what is missing
+    ///   rather than left with a quietly shorter list.
     @discardableResult
     public func prefetch(_ ids: [String]) async -> [String] {
         var failed: [String] = []
@@ -149,25 +153,26 @@ public final class ImageLibrary: Sendable {
         return failed
     }
 
-    // MARK: - 書き込み
+    // MARK: - Writing
 
-    /// 画像を上げて ID を得る。
+    /// Uploads bytes through the transport and returns the id assigned to them.
     ///
-    /// 上げたバイト列はそのまま手元のキャッシュに入れる。
-    /// 直後に表示するために取り直すのは、同じものを 2 度運ぶだけなので。
+    /// What you uploaded goes straight into the disk cache, so displaying the image immediately
+    /// afterwards does not download what this device just sent.
     ///
-    /// - Throws: ``ImageTransport/upload(_:contentType:)`` が投げたものをそのまま。
-    ///   表示経路と違い、ここは呼び出し側がアプリのコードなので、
-    ///   表示用に丸めるより元の型が残っているほうが役に立つ
+    /// - Throws: Whatever ``ImageTransport/upload(_:contentType:)`` threw, untouched. Unlike the
+    ///   display path, the caller here is your own code, so the original type is more use than a
+    ///   rounded-off one.
     public func add(_ data: Data, contentType: String) async throws -> String {
         let id = try await transport.upload(data, contentType: contentType)
         diskCache.store(data, for: .id(id))
         return id
     }
 
-    /// 画像を削除し、手元のキャッシュからも落とす。
+    /// Deletes an image through the transport and drops it from both cache layers.
     ///
-    /// - Throws: ``ImageTransport/delete(id:)`` が投げたものをそのまま
+    /// - Throws: Whatever ``ImageTransport/delete(id:)`` threw, untouched. Nothing is evicted
+    ///   when the delete fails, so the caches keep matching the backend.
     public func remove(id: String) async throws {
         try await transport.delete(id: id)
         let key = ImageCacheKey.id(id)
@@ -175,19 +180,24 @@ public final class ImageLibrary: Sendable {
         memoryCache.remove(for: key)
     }
 
-    // MARK: - キャッシュ管理
+    // MARK: - Cache management
 
-    /// メモリ上の復号済み画像を捨てる。ディスクは残るので表示は再度復号するだけで済む
+    /// Discards the decoded images held in memory.
+    ///
+    /// The bytes stay on disk, so redisplaying one of them costs a decode rather than a download.
     public func clearMemoryCache() {
         memoryCache.removeAll()
     }
 
-    /// ディスク上のバイト列を捨てる。次の表示はネットワークからになる
+    /// Discards the bytes held on disk.
+    ///
+    /// The next display of each image goes back to the transport. Images already decoded in
+    /// memory keep displaying until that layer is cleared too.
     public func clearDiskCache() {
         diskCache.removeAll()
     }
 
-    /// ディスクキャッシュの合計サイズ（バイト）
+    /// The total bytes currently held on disk, measured by walking the cache directory.
     public func diskCacheSize() -> Int64 {
         diskCache.totalBytes()
     }
@@ -197,8 +207,8 @@ public final class ImageLibrary: Sendable {
     @MainActor
     private func decode(_ data: Data, for key: ImageCacheKey) throws -> PlatformImage {
         guard let image = PlatformImage(data: data) else {
-            // 画像にならないバイト列を置いたままにすると、
-            // 以降ずっとディスクヒットして同じ失敗を返し続ける
+            // Leaving undecodable bytes on disk would turn every later request into a disk
+            // hit that fails the same way, indefinitely.
             diskCache.remove(for: key)
             throw ImageLoadError.notAnImage(byteCount: data.count)
         }
@@ -222,10 +232,11 @@ public final class ImageLibrary: Sendable {
         return data
     }
 
-    /// 失敗したら ``RetryPolicy`` に従って再試行する。
+    /// Runs an operation, retrying failures according to the configured retry policy.
     ///
-    /// 待機に失敗（キャンセル）したらそこで打ち切る。キャンセルされたタスクで
-    /// 再試行を続けると、画面から消えた画像のためにネットワークを使い続けることになる
+    /// Gives up as soon as the wait itself fails, which is how cancellation gets through: a
+    /// cancelled task that kept retrying would go on using the network for an image that has
+    /// already left the screen.
     private func withRetry<T>(_ operation: () async throws -> T) async throws -> T {
         var attempt = 0
         while true {

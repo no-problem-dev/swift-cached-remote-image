@@ -1,63 +1,65 @@
 import Foundation
 
-/// ディスク上の画像バイト列。**ネットワークには行かない。**
+/// Synchronous, network-free access to the image bytes already on this device.
 ///
-/// WidgetKit のタイムライン生成は非同期のネットワーク取得ができない。
-/// 「ディスクにあるものだけを、同期で、すぐ返す」入口が要る。
-/// この型はネットワークに出る手段を一切持たないので、
-/// ウィジェットに渡しても取得のために固まることが起こりえない。
+/// WidgetKit's timeline generation has nowhere to put an async network call, so a widget needs an
+/// entry point that answers with whatever is on disk right now. This type has no way to reach the
+/// network at all, so holding one cannot stall a timeline on a fetch.
 ///
-/// アプリ本体は ``ImageLibrary`` を使う（この型はその内側にも居る）。
-/// ウィジェットはこの型を直接作り、アプリ本体と**同じ ``ImageCacheLocation``** を渡す。
+/// The app itself uses ``ImageLibrary``, which owns one of these internally. A widget builds its
+/// own and passes the same ``ImageCacheLocation`` value the app used.
 ///
-/// ## ウィジェットでの使い方
+/// ## Reading from a widget
 /// ```swift
 /// let cache = try ImageDiskCache(location: .appGroup("group.com.example.app"))
 /// if let data = cache.imageData(for: item.imageId), let image = UIImage(data: data) {
 ///     Image(uiImage: image)
 /// } else {
-///     Text(item.emoji)   // 無ければ落とす先を用意しておく
+///     Text(item.emoji)   // always have somewhere to land
 /// }
 /// ```
 ///
-/// ## 保存されるのは受け取ったバイト列そのもの
-/// 3.x は `UIImage` に復号してから JPEG q0.8 で再エンコードして書いていた。
-/// 取得済みのバイト列を捨てて劣化した別のバイト列を作る動きで、PNG の透過も失われていた。
-/// 4.0 では受け取った Data をそのまま書く。だから ``imageData(for:)`` が返すのは
-/// サーバーが返した実物であり、ウィジェット側で余計な変換が要らない。
+/// ## What gets stored
+/// Entries are written exactly as they arrived, with no decode-and-re-encode step. PNG
+/// transparency therefore survives, and a widget reads the real file rather than a lossy copy of
+/// it. Nothing here is decoded — that cost is paid by whoever displays the image.
 public struct ImageDiskCache: Sendable {
     private let directory: URL
     private let sizeLimit: Int64
 
     /// - Parameters:
-    ///   - location: 保存場所。ウィジェットと共有するなら ``ImageCacheLocation/appGroup(_:subdirectory:)``
-    ///   - sizeLimit: ディスク使用量の上限（バイト）。超えたぶんは古い順に消す
-    /// - Throws: 場所を解決・作成できなかったとき。App Group の entitlement 忘れなど
+    ///   - location: Where the files are kept. Use ``ImageCacheLocation/appGroup(_:subdirectory:)``
+    ///     to share them with a widget.
+    ///   - sizeLimit: Maximum bytes to keep. Once the total passes it, the oldest entries are
+    ///     deleted until it fits again.
+    /// - Throws: ``ImageCacheLocationError`` when the directory cannot be resolved or created,
+    ///   such as when the App Group entitlement is missing.
     public init(location: ImageCacheLocation = .caches, sizeLimit: Int64 = 100 * 1024 * 1024) throws {
         self.directory = try location.resolvedDirectory()
         self.sizeLimit = sizeLimit
     }
 
-    /// キャッシュ済みの画像バイト列を同期で返す。無ければ `nil`。
+    /// Returns the cached bytes for an image synchronously, or `nil` when they are not on disk.
     ///
-    /// **ネットワークには行かない。** `nil` は「まだ端末に無い」だけを意味する。
+    /// Never touches the network, so `nil` means exactly one thing: those bytes have not reached
+    /// this device yet.
     ///
-    /// - Parameter id: 画像 ID
+    /// - Parameter id: The image id the bytes were stored under.
     public func imageData(for id: String) -> Data? {
         data(for: .id(id))
     }
 
-    /// 画像 ID のバイト列が端末にあるか。読み込まずに存在だけ見る
+    /// Reports whether an image's bytes are on disk, without reading them into memory.
     public func contains(_ id: String) -> Bool {
         contains(.id(id))
     }
 
-    /// ディスクキャッシュの合計サイズ（バイト）
+    /// The total size of the cached files in bytes, measured by walking the directory.
     public func totalBytes() -> Int64 {
         entries().reduce(Int64(0)) { $0 + $1.size }
     }
 
-    /// すべて削除する
+    /// Deletes every cached file. Each image is then fetched again the next time it is displayed.
     public func removeAll() {
         guard let contents = try? FileManager.default
             .contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
@@ -66,7 +68,7 @@ public struct ImageDiskCache: Sendable {
         }
     }
 
-    // MARK: - 内部（URL 経路のキーも扱えるようにするため、公開 API とは別口にしてある）
+    // MARK: - Internal (kept apart from the public API so URL-keyed entries can be stored too)
 
     func data(for key: ImageCacheKey) -> Data? {
         try? Data(contentsOf: fileURL(for: key))
@@ -76,12 +78,12 @@ public struct ImageDiskCache: Sendable {
         FileManager.default.fileExists(atPath: fileURL(for: key).path)
     }
 
-    /// バイト列を保存し、上限を超えていれば古い順に消す。
+    /// Writes the bytes, then evicts the oldest entries if the total is now over the limit.
     ///
-    /// 書き込みはネットワーク往復のあとにしか起きないので、
-    /// そのたびにディレクトリを走査してもコストは埋もれる。
-    /// 走査を省くために書き込み量を別に持つと、プロセスをまたいだ時点で嘘になる
-    /// （アプリとウィジェットが同じディレクトリを共有する）。
+    /// Writes only ever follow a network round trip, so scanning the directory each time is
+    /// buried in that cost. Tracking the written size separately to avoid the scan would go wrong
+    /// the moment a second process touched the same directory — which is exactly what an app and
+    /// its widget do.
     func store(_ data: Data, for key: ImageCacheKey) {
         try? data.write(to: fileURL(for: key), options: .atomic)
         trimToSizeLimit()
@@ -117,10 +119,10 @@ public struct ImageDiskCache: Sendable {
         }
     }
 
-    /// 上限を超えたぶんを古い順に消す。
+    /// Deletes entries oldest-first until the total fits inside the size limit.
     ///
-    /// App Group に置いた場合、OS は容量不足でも消してくれない。
-    /// 上限を持たないと、画像を見るほど端末の空きが減り続けて戻らない。
+    /// The system never reclaims an App Group container, even under storage pressure. Without a
+    /// ceiling of our own, the space used would grow with every image viewed and never come back.
     private func trimToSizeLimit() {
         let all = entries()
         var total = all.reduce(Int64(0)) { $0 + $1.size }

@@ -1,17 +1,19 @@
 import Foundation
 
-/// 1 枚の画像の読み込み状態を持つ。
+/// Holds the loading state of one image for one view.
 ///
-/// 再試行は ``ImageLibrary`` 側にある。ビューを経由しない取得（先読みなど）にも
-/// 同じ方針が効いている必要があるため。ここがやるのは
-/// 「``ImageSource`` を ``ImageLibrary`` の呼び分けに変える」ことと状態の保持だけ。
+/// Retries live in ``ImageLibrary`` instead, so that fetches which never go through a view —
+/// prefetching, for instance — follow the same policy. All this does is turn an ``ImageSource``
+/// into the matching library call and keep the resulting state.
 @MainActor
 @Observable
 final class CachedRemoteImageLoader {
     private(set) var state: LoadingState = .idle
 
-    /// 環境に ``ImageLibrary`` が無ければ `nil`。
-    /// 未注入は失敗として状態に載せる（3.x はここで `print` して素通りしていた）
+    /// `nil` when nothing injected a library into the environment.
+    ///
+    /// That case is recorded as a failure in the state rather than passed over, so the reason
+    /// reaches the error view instead of disappearing.
     private let library: ImageLibrary?
     private let source: ImageSource
 
