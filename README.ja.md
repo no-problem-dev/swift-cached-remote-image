@@ -330,11 +330,6 @@ transport を書いた側なので、自分が投げたエラーをそこで捕�
 
 書き込み経路（`add` / `remove`）は transport が投げた型をそのまま通す。
 
-## 3.x からの移行
-
-`ImageService` / `ImageServiceImpl` は廃止した。破壊的変更の一覧と移行手順は
-[CHANGELOG.md](CHANGELOG.md) を参照。
-
 ## ライセンス
 
 このプロジェクトは MIT ライセンスの下で公開されている。詳細は [LICENSE](LICENSE) ファイルを参照。

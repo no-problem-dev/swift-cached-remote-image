@@ -336,11 +336,6 @@ type — refresh a token, sign the user out — is the code that wrote the trans
 
 Write paths (`add`, `remove`) rethrow whatever your transport threw, untouched.
 
-## Migrating from 3.x
-
-`ImageService` / `ImageServiceImpl` are gone; see [CHANGELOG.md](CHANGELOG.md) for the full list
-of breaking changes and step-by-step migration.
-
 ## License
 
 This project is released under the MIT License. See the [LICENSE](LICENSE) file for details.
