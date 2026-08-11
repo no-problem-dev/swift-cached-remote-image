@@ -151,7 +151,7 @@ URL にできない文字列、transport の失敗、復号できないバイト
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "4.0.2")
+    .package(url: "https://github.com/no-problem-dev/swift-cached-remote-image.git", from: "5.0.0")
 ]
 ```
 
