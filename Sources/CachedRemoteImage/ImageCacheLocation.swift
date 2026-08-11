@@ -75,9 +75,9 @@ extension ImageCacheLocationError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .appGroupUnavailable(let identifier):
-            return "App Group '\(identifier)' のコンテナを解決できない（entitlement か識別子を確認する）"
+            return "The container for App Group '\(identifier)' could not be resolved. Check the entitlement and the identifier"
         case .cachesUnavailable:
-            return "Caches ディレクトリを解決できない"
+            return "The Caches directory could not be resolved"
         }
     }
 }

@@ -90,7 +90,7 @@ final class ImageLoadErrorTests: XCTestCase {
     func testDeveloperDescriptionKeepsTheCause() {
         XCTAssertEqual(
             ImageLoadError.transportFailed(reason: "401 Unauthorized").errorDescription,
-            "画像の取得に失敗: 401 Unauthorized"
+            "The fetch failed: 401 Unauthorized"
         )
     }
 }

@@ -2,7 +2,7 @@
 
 # swift-cached-remote-image
 
-SwiftUI でリモート画像をメモリ・ディスクにキャッシュして表示する。キーは URL ではなく画像 ID。
+取得を自分のアプリの API と認証で行うリモート画像を SwiftUI に表示する。メモリ・ディスクのキャッシュ、リトライ、読み込み状態はこちらで引き受ける。
 
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-iOS%2017.0+%20%7C%20macOS%2014.0+-blue.svg)

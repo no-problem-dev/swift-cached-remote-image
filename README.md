@@ -2,7 +2,7 @@ English | [日本語](./README.ja.md)
 
 # swift-cached-remote-image
 
-Remote images in SwiftUI, cached in memory and on disk, keyed by image id rather than by URL.
+Displays remote images in SwiftUI when your app does its own fetching — behind your own API and authentication — and handles the memory and disk caching, retries and loading states for you.
 
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-iOS%2017.0+%20%7C%20macOS%2014.0+-blue.svg)

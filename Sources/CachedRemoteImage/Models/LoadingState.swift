@@ -27,18 +27,18 @@ public enum ImageLoadError: Error, Equatable, Sendable {
 
     /// A short message that is safe to put in front of a user.
     ///
-    /// Deliberately vague about the cause, and written in Japanese with no localization table
+    /// Deliberately vague about the cause, and written in English with no localization table
     /// behind it. Use `errorDescription` when you want the detail.
     public var localizedMessage: String {
         switch self {
         case .libraryNotConfigured:
-            return "画像の読み込み設定がされていません"
+            return "Image loading isn't set up"
         case .invalidURL:
-            return "無効な画像URLです"
+            return "That image address isn't valid"
         case .transportFailed:
-            return "画像の取得に失敗しました"
+            return "Couldn't load the image"
         case .notAnImage:
-            return "画像を表示できませんでした"
+            return "Couldn't display the image"
         }
     }
 }
@@ -48,13 +48,13 @@ extension ImageLoadError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .libraryNotConfigured:
-            return "ImageLibrary が未注入（ルートビューで .imageLibrary(_:) を呼ぶ）"
+            return "No ImageLibrary in the environment. Call .imageLibrary(_:) on the root view"
         case .invalidURL(let string):
-            return "URL として解釈できない文字列: \(string)"
+            return "Could not read as a URL: \(string)"
         case .transportFailed(let reason):
-            return "画像の取得に失敗: \(reason)"
+            return "The fetch failed: \(reason)"
         case .notAnImage(let byteCount):
-            return "受け取った \(byteCount) バイトが画像として復号できない"
+            return "The \(byteCount) bytes received could not be decoded as an image"
         }
     }
 }
