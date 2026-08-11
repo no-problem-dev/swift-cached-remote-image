@@ -30,14 +30,19 @@ final class CachedRemoteImageLoader {
             return
         }
 
-        state = .loading(progress: nil)
+        state = .loading
 
         do {
             state = .success(try await image(from: library))
+        } catch is CancellationError {
+            // The view left the screen; nothing failed. Recording a failure here would put the
+            // error view in front of someone who only scrolled past, and the entry guard above
+            // would then keep the image from ever loading again.
+            state = .idle
         } catch let error as ImageLoadError {
             state = .failure(error)
         } catch {
-            state = .failure(.transportFailed(reason: error.localizedDescription))
+            state = .failure(.transportFailed(wrapping: error))
         }
     }
 

@@ -111,8 +111,12 @@ public final class ImageLibrary: Sendable {
         let data = try await withRetry {
             do {
                 return try await self.transport.fetch(id: id)
+            } catch is CancellationError {
+                // Cancellation is not a failure to fetch. Relabelling it here would put
+                // "Couldn't load the image" in front of someone who only scrolled away.
+                throw CancellationError()
             } catch {
-                throw ImageLoadError.transportFailed(reason: error.localizedDescription)
+                throw ImageLoadError.transportFailed(wrapping: error)
             }
         }
         diskCache.store(data, for: key)
@@ -137,20 +141,29 @@ public final class ImageLibrary: Sendable {
     /// decoding happens on its side.
     ///
     /// - Parameter ids: The image ids to download.
-    /// - Returns: The ids that could not be downloaded. A failed prefetch is recoverable at
-    ///   display time, so it does not stop the rest, but the caller is still told what is missing
-    ///   rather than left with a quietly shorter list.
+    /// - Returns: The ids that could not be downloaded, each with the reason it could not be.
+    ///   A failed prefetch is recoverable at display time, so one failure does not stop the rest,
+    ///   and the reason travels with the id: an expired session and a deleted image both leave an
+    ///   id missing, but only one of them is worth sending the user to sign-in over.
+    ///
+    ///   Cancelling the task stops the walk where it stands, and the ids never reached are left
+    ///   out rather than reported as failures they never had.
     @discardableResult
-    public func prefetch(_ ids: [String]) async -> [String] {
-        var failed: [String] = []
+    public func prefetch(_ ids: [String]) async -> [String: ImageLoadError] {
+        var failures: [String: ImageLoadError] = [:]
         for id in ids where !diskCache.contains(id) {
+            if Task.isCancelled { break }
             do {
                 _ = try await imageData(for: id)
+            } catch is CancellationError {
+                break
+            } catch let error as ImageLoadError {
+                failures[id] = error
             } catch {
-                failed.append(id)
+                failures[id] = .transportFailed(wrapping: error)
             }
         }
-        return failed
+        return failures
     }
 
     // MARK: - Writing
@@ -224,8 +237,10 @@ public final class ImageLibrary: Sendable {
             do {
                 let (data, _) = try await self.urlSession.data(from: url)
                 return data
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
-                throw ImageLoadError.transportFailed(reason: error.localizedDescription)
+                throw ImageLoadError.transportFailed(wrapping: error)
             }
         }
         diskCache.store(data, for: key)
@@ -234,15 +249,20 @@ public final class ImageLibrary: Sendable {
 
     /// Runs an operation, retrying failures according to the configured retry policy.
     ///
-    /// Gives up as soon as the wait itself fails, which is how cancellation gets through: a
-    /// cancelled task that kept retrying would go on using the network for an image that has
-    /// already left the screen.
+    /// Cancellation ends the retrying immediately and travels out as `CancellationError`. Leaving
+    /// it to the wait between attempts would not work: ``RetryPolicy/fixed(count:)`` waits for
+    /// zero seconds, so there is no `Task.sleep` to throw, and a cancelled load would use up every
+    /// attempt going to the network for an image that has already left the screen.
     private func withRetry<T>(_ operation: () async throws -> T) async throws -> T {
         var attempt = 0
         while true {
             do {
                 return try await operation()
             } catch {
+                if error is CancellationError { throw error }
+                // Catches the transports that report cancellation as something else —
+                // `URLSession` raises `URLError.cancelled` rather than `CancellationError`.
+                try Task.checkCancellation()
                 guard attempt < retryPolicy.maxRetries else { throw error }
                 let delay = retryPolicy.delay(for: attempt)
                 if delay > 0 {

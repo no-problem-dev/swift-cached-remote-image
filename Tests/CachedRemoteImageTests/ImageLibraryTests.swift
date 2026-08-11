@@ -137,7 +137,7 @@ final class ImageLibraryTests: XCTestCase {
 
         let failed = await library.prefetch(["a", "b"])
 
-        XCTAssertEqual(failed, [])
+        XCTAssertEqual(failed, [:])
         XCTAssertNotNil(library.cachedImageData(for: "a"))
         XCTAssertNotNil(library.cachedImageData(for: "b"))
     }
@@ -157,7 +157,23 @@ final class ImageLibraryTests: XCTestCase {
 
         let failed = await library.prefetch(["a", "b"])
 
-        XCTAssertEqual(failed, ["a", "b"], "落ちた ID を黙って捨てないべき")
+        XCTAssertEqual(Set(failed.keys), ["a", "b"], "落ちた ID を黙って捨てないべき")
+    }
+
+    func testPrefetchReportsWhyEachIdCouldNotBeGot() async throws {
+        // ID だけ返ると、期限切れのトークンで落ちたのか、その画像がもう無いのかが区別できない。
+        // 呼び出し側は「何が足りないか」は分かっても「どうすればいいか」が分からない
+        let library = try makeLibrary(transport: FakeImageTransport(behavior: .failing))
+
+        let failed = await library.prefetch(["a"])
+
+        guard case .transportFailed(let reason) = failed["a"] else {
+            return XCTFail("落ちた理由が捨てられている: \(String(describing: failed["a"]))")
+        }
+        XCTAssertTrue(
+            reason.contains("fake transport is failing"),
+            "transport が言った理由がそのまま残っているべき: \(reason)"
+        )
     }
 
     // MARK: - 失敗の伝え方
@@ -173,6 +189,27 @@ final class ImageLibraryTests: XCTestCase {
                 return XCTFail("想定外のエラー: \(error)")
             }
             XCTAssertFalse(reason.isEmpty, "原因の説明が残っているべき")
+        }
+    }
+
+    func testTransportFailureKeepsWhatTheTransportSaid() async throws {
+        // 既存の「reason が空でない」だけの検査はここを通してしまう。
+        // `localizedDescription` は LocalizedError でない Swift のエラーに対して
+        // 「操作を完了できませんでした。（型名 エラー 1）」という定型文しか返さないので、
+        // reason は空にならないまま中身だけが消える。しかも端末の言語で文面が変わる
+        let library = try makeLibrary(transport: FakeImageTransport(behavior: .failing))
+
+        do {
+            _ = try await library.imageData(for: "img-1")
+            XCTFail("取得の失敗が握りつぶされている")
+        } catch let error as ImageLoadError {
+            guard case .transportFailed(let reason) = error else {
+                return XCTFail("想定外のエラー: \(error)")
+            }
+            XCTAssertTrue(
+                reason.contains("fake transport is failing"),
+                "transport が言ったことが定型文に置き換わっている: \(reason)"
+            )
         }
     }
 

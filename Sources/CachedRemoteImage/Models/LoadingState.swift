@@ -43,6 +43,34 @@ public enum ImageLoadError: Error, Equatable, Sendable {
     }
 }
 
+extension ImageLoadError {
+    /// Records an error from a transport or a download as a transport failure, keeping what it
+    /// actually said.
+    ///
+    /// Not `localizedDescription`. Foundation answers that, for any error that did not opt in to
+    /// `LocalizedError`, with a fixed sentence naming the type and a case number: a
+    /// `FetchFailure(reason: "token expired")` arrives as "The operation couldn't be completed.
+    /// (App.FetchFailure error 1.)", and `.unauthorized` and `.notFound` on one enum differ only
+    /// by that number. The sentence is translated into the device's language too, so the one
+    /// piece of text a developer has to work from changes with whoever is holding the phone.
+    static func transportFailed(wrapping error: any Error) -> ImageLoadError {
+        .transportFailed(reason: describing(error))
+    }
+
+    private static func describing(_ error: any Error) -> String {
+        // What the author of the error wrote, when they wrote one.
+        if let described = (error as? any LocalizedError)?.errorDescription {
+            return described
+        }
+        // Errors bridged from `NSError` — URLSession's among them — carry a real sentence here.
+        if let described = (error as NSError).userInfo[NSLocalizedDescriptionKey] as? String {
+            return described
+        }
+        // Everything else: the Swift value, which still holds its case name and payload.
+        return String(describing: error)
+    }
+}
+
 extension ImageLoadError: LocalizedError {
     /// A developer-facing description that keeps the detail the user-facing message drops.
     public var errorDescription: String? {
@@ -61,22 +89,27 @@ extension ImageLoadError: LocalizedError {
 
 /// The stage a single image load has reached, as the view sees it.
 ///
-/// A load moves through the sequence once and never goes back:
+/// A load settles once:
 /// ```
 /// idle → loading → success or failure
 /// ```
+/// with one way back: a cancelled load returns to `idle`, because nothing about it failed and the
+/// same view may come round again.
 ///
 /// - Note: Not `Sendable`. It carries a decoded ``PlatformImage``, which is not sendable on
 ///   macOS, so this is meant to be read on the main actor.
 public enum LoadingState {
-    /// Nothing has been requested yet, and the placeholder is showing.
+    /// No load is outstanding, and the placeholder is showing.
+    ///
+    /// Both the state before anything is requested and the state a cancelled load returns to.
     case idle
 
     /// A fetch is in flight, including any retries.
     ///
-    /// - Parameter progress: How much has arrived, from 0 to 1, or `nil` when the total length is
-    ///   not known.
-    case loading(progress: Double?)
+    /// How far along it is is not reported. ``ImageTransport/fetch(id:)`` hands back the bytes in
+    /// one piece, so there is no point at which a fraction could be known, and a `progress` that
+    /// was always `nil` only invited determinate progress bars that never moved.
+    case loading
 
     /// The image is decoded and ready to display.
     ///
@@ -134,8 +167,8 @@ extension LoadingState: Equatable {
         switch (lhs, rhs) {
         case (.idle, .idle):
             return true
-        case (.loading(let lhsProgress), .loading(let rhsProgress)):
-            return lhsProgress == rhsProgress
+        case (.loading, .loading):
+            return true
         case (.success, .success):
             // Two successes compare equal by state alone, not by which image each one holds.
             return true
