@@ -19,6 +19,7 @@ import PackageDescription
 // → 取り方の実装は利用者が持つ。このパッケージが持つのは protocol・キャッシュ・ビューだけ。
 let package = Package(
     name: "CachedRemoteImage",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
@@ -37,7 +38,12 @@ let package = Package(
             // プライバシーマニフェスト。`.copy` で中身を変えずにリソースバンドルへ入れる
             // （`.process` だと plist として最適化されうる）。Xcode がバンドルから拾って
             // アプリのプライバシーレポートに合算する。
-            resources: [.copy("PrivacyInfo.xcprivacy")]
+            //
+            // 文字列カタログ（Resources/Localizable.xcstrings）は利用者の画面に出る文言の英語と日本語を持つ。
+            resources: [
+                .copy("PrivacyInfo.xcprivacy"),
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "CachedRemoteImageTests",
