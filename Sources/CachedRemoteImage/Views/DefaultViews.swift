@@ -41,8 +41,12 @@ public struct DefaultErrorView: View {
 
             if let onRetry = onRetry {
                 Button(action: onRetry) {
-                    Label("Retry", systemImage: "arrow.clockwise")
-                        .font(.caption)
+                    Label {
+                        Text("Retry", bundle: .module)
+                    } icon: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .font(.caption)
                 }
                 .buttonStyle(.bordered)
             }

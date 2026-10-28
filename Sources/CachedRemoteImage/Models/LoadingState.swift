@@ -27,18 +27,18 @@ public enum ImageLoadError: Error, Equatable, Sendable {
 
     /// A short message that is safe to put in front of a user.
     ///
-    /// Deliberately vague about the cause, and written in English with no localization table
-    /// behind it. Use `errorDescription` when you want the detail.
+    /// Deliberately vague about the cause. Looked up in the package's string catalog, so it follows
+    /// the device language (English and Japanese). Use `errorDescription` when you want the detail.
     public var localizedMessage: String {
         switch self {
         case .libraryNotConfigured:
-            return "Image loading isn't set up"
+            return String(localized: "Image loading isn't set up", bundle: .module)
         case .invalidURL:
-            return "That image address isn't valid"
+            return String(localized: "That image address isn't valid", bundle: .module)
         case .transportFailed:
-            return "Couldn't load the image"
+            return String(localized: "Couldn't load the image", bundle: .module)
         case .notAnImage:
-            return "Couldn't display the image"
+            return String(localized: "Couldn't display the image", bundle: .module)
         }
     }
 }

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/ja/).
 
 ## [Unreleased]
 
+### Fixed
+- **The default error view speaks Japanese again.** 5.0.0 replaced the Japanese messages with
+  English literals and nothing to translate them, so an app on a Japanese device that shows
+  `DefaultErrorView` showed "Couldn't load the image" and a "Retry" button in English.
+  `CachedRemoteImage` now ships a string catalog (`Resources/Localizable.xcstrings`, English
+  source with Japanese) and looks up `ImageLoadError.localizedMessage` and the retry button in it.
+  The Japanese follows the wording from 1.1.6. The bundle carries both `en.lproj` and `ja.lproj`,
+  so an English device still gets English. `errorDescription` stays English, since it is meant
+  for developers.
+
 ## [5.0.0] - 2026-08-11
 
 None
