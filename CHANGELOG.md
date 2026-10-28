@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/ja/).
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-10-28
+
 ### Fixed
 - **The default error view speaks Japanese again.** 5.0.0 replaced the Japanese messages with
   English literals and nothing to translate them, so an app on a Japanese device that shows
