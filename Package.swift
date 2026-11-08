@@ -29,9 +29,6 @@ let package = Package(
             name: "CachedRemoteImage",
             targets: ["CachedRemoteImage"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-docc-plugin", .upToNextMajor(from: "1.4.0"))
-    ],
     targets: [
         .target(
             name: "CachedRemoteImage",

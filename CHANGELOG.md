@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/ja/).
 
 ## [Unreleased]
 
+## [5.0.2] - 2026-11-08
+
+### Changed
+
+- swift-docc-plugin への依存を外した（DocC は Xcode で開く）
+
 ## [5.0.1] - 2026-10-28
 
 ### Fixed
@@ -446,7 +452,8 @@ added for the new paths (ID-keyed cache, synchronous reads, transport substituti
 - Cache management
 - iOS 17.0+ and macOS 14.0+ support
 
-[Unreleased]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.5...HEAD
+[Unreleased]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/5.0.2...HEAD
+[5.0.2]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/5.0.1...5.0.2
 [1.1.5]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/no-problem-dev/swift-cached-remote-image/compare/v1.1.2...v1.1.3
