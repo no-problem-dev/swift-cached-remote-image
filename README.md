@@ -146,7 +146,7 @@ Write paths (`add`, `remove`) rethrow whatever your transport threw, untouched.
 
 ## Documentation
 
-📚 **[API reference and guides](https://no-problem-dev.github.io/swift-cached-remote-image/documentation/cachedremoteimage/)**
+📚 **[API reference and guides](Sources/CachedRemoteImage/Documentation.docc)**
 — a full transport written on `URLSession`, the widget setup end to end, and every configuration
 option.
 
