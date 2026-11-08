@@ -144,7 +144,7 @@ URL にできない文字列、transport の失敗、復号できないバイト
 
 ## ドキュメント
 
-📚 **[API リファレンスとガイド](https://no-problem-dev.github.io/swift-cached-remote-image/documentation/cachedremoteimage/)**
+📚 **[API リファレンスとガイド](Sources/CachedRemoteImage/Documentation.docc)**
 — `URLSession` で書いた transport の全文、ウィジェット構成の手順、設定項目の全一覧。
 
 ## インストール
